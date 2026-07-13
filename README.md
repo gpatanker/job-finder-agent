@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Job Finder Agent
 
-## Getting Started
+A personal job-application command center: track roles through a pipeline, generate ATS-friendly tailored resumes, scrape application short-answer prompts, draft grounded answers from a story bank, and queue ready applications for an external browser-automation agent to fill in and (optionally) submit.
 
-First, run the development server:
+**This app never submits an application itself.** It prepares resumes, drafts answers, and queues explicit application runs. Actual form-filling/submission is performed by a separate browser-automation step, outside this codebase, only after you authorize it.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Status
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+🚧 Under active development. See `TESTING.md` (once added) for what's verified so far.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Next.js (App Router, TypeScript) on Vercel
+- Supabase (Postgres via Drizzle ORM, Storage for generated PDFs, Auth)
+- pdfkit for resume PDF generation (Carlito font, ATS-friendly real text)
+- Claude API (Anthropic) for grounded answer generation, resume-tailoring keyword optimization, and agent-driven job-search suggestions
 
-## Learn More
+## Getting your own instance running
 
-To learn more about Next.js, take a look at the following resources:
+This repo is generic and config-driven — no one's personal data lives in source control. To run your own instance you'll need:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. A Supabase project (Postgres + Storage + Auth)
+2. An `ANTHROPIC_API_KEY`
+3. Your own resume/story-bank/profile data, provided via a local config file (see `local/README.md`, added in a later step) or entered through the Settings page after deploying
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Setup instructions, environment variables, and deployment steps will be filled in as those pieces are built.
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT — see `LICENSE`.
