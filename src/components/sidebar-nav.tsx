@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { href: "/apply-agent", label: "Apply Agent", enabled: false },
   { href: "/run-queue", label: "Run Queue", enabled: false },
   { href: "/search", label: "Search / Import", enabled: false },
-  { href: "/settings", label: "Settings", enabled: false },
+  { href: "/settings", label: "Settings", enabled: true },
 ];
 
 export function SidebarNav() {

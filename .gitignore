@@ -41,6 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 # personal data — never committed (resume, story bank, candidate profile, generated PDFs)
-/local/
+# Exceptions below allow generic *.example.json templates + docs to be tracked.
+/local/*
+!/local/*.example.json
+!/local/README.md
 /generated/
 *.local.json

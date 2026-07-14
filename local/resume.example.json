@@ -1,0 +1,31 @@
+{
+  "name": "Jordan Example",
+  "contactLine": "(555) 555-0100 - jordan.example@example.com - linkedin.com/in/jordan-example/",
+  "education": [
+    { "school": "State University", "degree": "B.S. in Business Administration" }
+  ],
+  "experience": [
+    {
+      "company": "Example Corp",
+      "role": "Business Operations Analyst",
+      "team": "Strategy Team",
+      "location": "Austin, TX",
+      "dateRange": "Jan 2023 – Present",
+      "bullets": [
+        {
+          "id": "example-1",
+          "text": "Reduced quarterly reporting cycle time by 30% by building a Python-based validation pipeline for sales data.",
+          "keywords": ["process improvement", "python", "reporting"],
+          "synonyms": {
+            "Reduced": ["Reduced", "Cut", "Shortened"]
+          }
+        }
+      ]
+    }
+  ],
+  "projects": [],
+  "skills": [
+    { "category": "Analytics", "items": ["SQL", "Python", "Tableau"] }
+  ],
+  "certifications": []
+}
