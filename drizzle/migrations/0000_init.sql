@@ -15,6 +15,7 @@ CREATE TABLE "agent_run_queue" (
 	"error" text
 );
 --> statement-breakpoint
+ALTER TABLE "agent_run_queue" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "application_questions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"job_id" uuid NOT NULL,
@@ -26,6 +27,7 @@ CREATE TABLE "application_questions" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "application_questions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE TABLE "jobs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"company" text NOT NULL,
@@ -55,5 +57,6 @@ CREATE TABLE "jobs" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "jobs" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "agent_run_queue" ADD CONSTRAINT "agent_run_queue_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application_questions" ADD CONSTRAINT "application_questions_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE cascade ON UPDATE no action;

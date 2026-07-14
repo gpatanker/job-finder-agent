@@ -1,5 +1,5 @@
 {
-  "id": "19ec1739-0930-4f03-9d74-e8ba5b6ba2c0",
+  "id": "66ec0e9a-931e-4896-adc5-42221cb17ec1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -119,7 +119,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.application_questions": {
       "name": "application_questions",
@@ -198,7 +198,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.jobs": {
       "name": "jobs",
@@ -374,7 +374,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     }
   },
   "enums": {},

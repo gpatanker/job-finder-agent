@@ -44,7 +44,7 @@ export const jobs = pgTable("jobs", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}).enableRLS();
 
 export const applicationQuestions = pgTable("application_questions", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -61,7 +61,7 @@ export const applicationQuestions = pgTable("application_questions", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}).enableRLS();
 
 export const agentRunQueue = pgTable("agent_run_queue", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -84,4 +84,4 @@ export const agentRunQueue = pgTable("agent_run_queue", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
   resultSummary: text("result_summary"),
   error: text("error"),
-});
+}).enableRLS();
