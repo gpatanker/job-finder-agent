@@ -20,9 +20,13 @@ export function SearchClient({
       if (!res.ok) throw new Error(body.error ?? "Search failed");
       setSuggestions(body.suggestions);
       if (body.warning) toast.warning(body.warning);
-      const closedNote = body.filteredClosed > 0 ? `, ${body.filteredClosed} filtered as likely closed` : "";
+      const notes = [
+        body.skipped > 0 ? `${body.skipped} already known` : null,
+        body.filteredClosed > 0 ? `${body.filteredClosed} filtered as likely closed` : null,
+        body.filteredGeneric > 0 ? `${body.filteredGeneric} filtered — link wasn't a specific posting` : null,
+      ].filter(Boolean);
       toast.success(
-        `Found ${body.found}, added ${body.added} new suggestions (${body.skipped} already known${closedNote})`
+        `Found ${body.found}, added ${body.added} new suggestions${notes.length ? ` (${notes.join(", ")})` : ""}`
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Search failed");

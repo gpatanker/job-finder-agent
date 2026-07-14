@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { candidateProfile, jobSearchSuggestions, jobs } from "@/lib/db/schema";
 import { findJobCandidates } from "@/lib/search/job-search-agent";
 import { isLikelyClosed } from "@/lib/search/freshness-check";
+import { looksLikeGenericCareersPage } from "@/lib/search/specificity-check";
 
 function normalize(company: string, title: string): string {
   return `${company}|${title}`.toLowerCase().replace(/\s+/g, " ").trim();
@@ -41,18 +42,28 @@ export async function POST() {
   let added = 0;
   let skipped = 0;
   let filteredClosed = 0;
+  let filteredGeneric = 0;
 
-  // Deterministic backstop on top of the agent's own instructions: actually
-  // fetch each candidate's apply page and look for "closed"/"filled"
-  // wording, since web search results (especially aggregator mirrors) can
-  // be stale. A fetch failure or ambiguous page defaults to "keep it" —
-  // this only filters out postings it's confident are dead.
+  // Deterministic backstops on top of the agent's own instructions:
+  // 1. Actually fetch each candidate's apply page and look for
+  //    "closed"/"filled" wording, since web search results (especially
+  //    aggregator mirrors) can be stale. A fetch failure or ambiguous page
+  //    defaults to "keep it" — this only filters out postings it's
+  //    confident are dead.
+  // 2. Reject applyUrls that are just a generic careers/jobs landing page
+  //    (no job ID or role-specific slug) — a real case surfaced one of
+  //    these ("snorkel.ai/join-us/") that didn't actually take the user to
+  //    the specific role it claimed to be for.
   const closedChecks = await Promise.all(
     candidates.map((c) => isLikelyClosed(c.applyUrl))
   );
 
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
+    if (looksLikeGenericCareersPage(candidate.applyUrl)) {
+      filteredGeneric++;
+      continue;
+    }
     if (closedChecks[i]) {
       filteredClosed++;
       continue;
@@ -87,6 +98,7 @@ export async function POST() {
     added,
     skipped,
     filteredClosed,
+    filteredGeneric,
     warning,
     suggestions,
   });

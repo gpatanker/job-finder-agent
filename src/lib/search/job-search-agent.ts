@@ -90,6 +90,7 @@ export async function findJobCandidates(params: {
 
 Rules:
 - Only include postings you actually found via web_search in this conversation, with a real applyUrl/sourceUrl from the search results. Never fabricate a posting or guess a URL.
+- applyUrl MUST be a deep link directly to that specific posting (a Greenhouse/Ashby/Lever URL with a job ID, or a company career-site URL with a role-specific slug) — NEVER a generic careers/jobs landing page (e.g. "company.com/careers" or "company.com/join-us" with nothing after it). If you can't find the specific posting's direct link, search more specifically (e.g. "site:job-boards.greenhouse.io <company>" or "<company> <title> greenhouse") before giving up — if you still can't find a direct link, don't include that candidate.
 - Only source postings from the company's own careers page, or from these reputable platforms: Greenhouse, Ashby, Lever, Indeed, ZipRecruiter, Wellfound, Handshake, JuiceBox, Monster, or other similarly well-established, mainstream job boards. Do not use unfamiliar scraped-listing aggregators or mirror sites (e.g. dealhub-style "revpath" sites) — these frequently keep mirroring listings long after the original has closed, which is unreliable for a real candidate.
 - If a search result's page indicates the posting is closed, filled, or expired (e.g. "no longer accepting applications", "position is probably filled"), skip it — do not include it.
 - Prioritize the candidate's stated role families, locations, salary floor, and preferred industries.
