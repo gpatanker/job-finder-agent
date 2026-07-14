@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { htmlIndicatesClosedPosting, isLikelyClosed } from "./freshness-check";
+import { htmlIndicatesClosedPosting, isLikelyClosed, pageMentionsTitle } from "./freshness-check";
 
 describe("htmlIndicatesClosedPosting", () => {
   it("detects the exact banner seen on a real closed aggregator listing", () => {
@@ -23,6 +23,34 @@ describe("htmlIndicatesClosedPosting", () => {
       <button>Apply now</button>
     </body></html>`;
     expect(htmlIndicatesClosedPosting(html)).toBe(false);
+  });
+});
+
+describe("pageMentionsTitle", () => {
+  it("regression: a company's general 'Current Openings' board does not mention a specific closed role (real case: Fireworks AI redirected a dead job-ID link to its general board)", () => {
+    const html = `<html><body>
+      <h1>Current Openings</h1>
+      <p>The job you are looking for is no longer open.</p>
+      <h2>Revenue Accounting Lead</h2>
+      <h2>Senior GRC Specialist</h2>
+      <h2>Business Development Representative</h2>
+    </body></html>`;
+    expect(pageMentionsTitle(html, "Financial & Business Operations Analyst")).toBe(false);
+  });
+
+  it("is not fooled by partial keyword overlap alone (stricter than keyword matching)", () => {
+    // Contains "business" and "operations" individually, but not the phrase
+    const html = `<body><h2>Business Development Representative</h2><h2>Go To Market Operations</h2></body>`;
+    expect(pageMentionsTitle(html, "Financial & Business Operations Analyst")).toBe(false);
+  });
+
+  it("returns true when the page actually contains the role's title", () => {
+    const html = `<body><h1>Technical Program Manager, Compute</h1><p>Apply now</p></body>`;
+    expect(pageMentionsTitle(html, "Technical Program Manager, Compute")).toBe(true);
+  });
+
+  it("does not block when no title is given to check against", () => {
+    expect(pageMentionsTitle("<body>anything</body>", "")).toBe(true);
   });
 });
 
@@ -77,5 +105,51 @@ describe("isLikelyClosed", () => {
       vi.fn().mockRejectedValue(new Error("network error"))
     );
     expect(await isLikelyClosed("https://example.com/unreachable")).toBe(false);
+  });
+
+  it("regression: flags a 200 response that silently redirected to a general careers board (title check catches what phrase-matching can't, since the closed banner is client-side rendered and invisible to a plain fetch)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => "<body><h1>Current Openings</h1><h2>Revenue Accounting Lead</h2></body>",
+      })
+    );
+    expect(
+      await isLikelyClosed(
+        "https://job-boards.greenhouse.io/fireworksai/jobs/4204418009",
+        "Financial & Business Operations Analyst"
+      )
+    ).toBe(true);
+  });
+
+  it("does not flag a live posting whose page contains its own title", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => "<body><h1>Technical Program Manager, Compute</h1></body>",
+      })
+    );
+    expect(
+      await isLikelyClosed(
+        "https://job-boards.greenhouse.io/anthropic/jobs/5138044008",
+        "Technical Program Manager, Compute"
+      )
+    ).toBe(false);
+  });
+
+  it("skips the title check entirely when no title is passed (backward compatible)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => "<body>Completely unrelated content</body>",
+      })
+    );
+    expect(await isLikelyClosed("https://example.com/no-title-given")).toBe(false);
   });
 });

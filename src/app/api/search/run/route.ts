@@ -55,7 +55,7 @@ export async function POST() {
   //    these ("snorkel.ai/join-us/") that didn't actually take the user to
   //    the specific role it claimed to be for.
   const closedChecks = await Promise.all(
-    candidates.map((c) => isLikelyClosed(c.applyUrl))
+    candidates.map((c) => isLikelyClosed(c.applyUrl, c.title))
   );
 
   for (let i = 0; i < candidates.length; i++) {

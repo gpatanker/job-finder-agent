@@ -12,6 +12,8 @@ const CLOSED_PHRASES = [
   "please do not apply",
   "this listing is no longer active",
   "no longer accepting new applicants",
+  "no longer open",
+  "job you are looking for is no longer open",
 ];
 
 export function htmlIndicatesClosedPosting(html: string): boolean {
@@ -20,15 +22,50 @@ export function htmlIndicatesClosedPosting(html: string): boolean {
   return CLOSED_PHRASES.some((phrase) => visibleText.includes(phrase));
 }
 
+function normalizePhrase(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
- * Best-effort liveness check: fetches the candidate's apply URL and scans
- * visible text for common "this posting is closed" phrasing (seen in
- * practice on job-board aggregators that mirror stale listings). Returns
- * true only when it's confident the posting is closed — any fetch failure,
- * timeout, or ambiguous result defaults to "assume still open" rather than
- * silently discarding a possibly-good lead.
+ * Stricter than keyword overlap on purpose: individual words from a job
+ * title ("business", "operations") commonly appear elsewhere on a careers
+ * page (other departments, nav labels) even when the specific role is gone
+ * — a real case (Fireworks AI) scored 2/4 keyword overlap on a page that
+ * had silently redirected to the company's general "Current Openings"
+ * board after the role closed. Requiring the (near-)full title phrase to
+ * appear is what actually distinguishes "this is that job's page" from
+ * "this page happens to mention some of the same words."
  */
-export async function isLikelyClosed(url: string, timeoutMs = 8000): Promise<boolean> {
+export function pageMentionsTitle(html: string, title: string): boolean {
+  const normalizedTitle = normalizePhrase(title);
+  if (!normalizedTitle) return true; // nothing to check against, don't block
+  const $ = cheerio.load(html);
+  const pageText = normalizePhrase($("body").text());
+  return pageText.includes(normalizedTitle);
+}
+
+/**
+ * Best-effort liveness check: fetches the candidate's apply URL once and
+ * evaluates multiple staleness signals against it —
+ *   1. HTTP 404/410 (itself a strong closed/removed signal)
+ *   2. Explicit "closed"/"filled"/"expired" phrasing in the visible text
+ *   3. The expected job title not appearing anywhere on the page (catches
+ *      client-side-rendered "no longer open" redirects to a company's
+ *      general careers board, where the closed banner itself is injected
+ *      by JS and invisible to a plain fetch, but the page obviously
+ *      doesn't contain the specific role anymore either)
+ * Any fetch failure, timeout, or ambiguous result defaults to "assume
+ * still open" rather than silently discarding a possibly-good lead.
+ */
+export async function isLikelyClosed(
+  url: string,
+  title?: string,
+  timeoutMs = 8000
+): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -44,7 +81,9 @@ export async function isLikelyClosed(url: string, timeoutMs = 8000): Promise<boo
     if (res.status === 404 || res.status === 410) return true;
     if (!res.ok) return false;
     const html = await res.text();
-    return htmlIndicatesClosedPosting(html);
+    if (htmlIndicatesClosedPosting(html)) return true;
+    if (title && !pageMentionsTitle(html, title)) return true;
+    return false;
   } catch {
     return false;
   } finally {
