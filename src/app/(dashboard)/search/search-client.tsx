@@ -22,6 +22,7 @@ export function SearchClient({
       if (body.warning) toast.warning(body.warning);
       const notes = [
         body.skipped > 0 ? `${body.skipped} already known` : null,
+        body.recovered > 0 ? `${body.recovered} recovered via direct company source` : null,
         body.filteredClosed > 0 ? `${body.filteredClosed} filtered as likely closed` : null,
         body.filteredGeneric > 0 ? `${body.filteredGeneric} filtered — link wasn't a specific posting` : null,
         body.filteredBlockedSource > 0

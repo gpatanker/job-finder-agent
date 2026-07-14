@@ -2,13 +2,25 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { candidateProfile, jobSearchSuggestions, jobs } from "@/lib/db/schema";
-import { findJobCandidates } from "@/lib/search/job-search-agent";
+import { findJobCandidates, type JobCandidate } from "@/lib/search/job-search-agent";
 import { isLikelyClosed } from "@/lib/search/freshness-check";
 import { looksLikeGenericCareersPage } from "@/lib/search/specificity-check";
 import { isBlockedSource } from "@/lib/search/blocked-sources";
+import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
 
 function normalize(company: string, title: string): string {
   return `${company}|${title}`.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+type CheckResult =
+  | { ok: true }
+  | { ok: false; reason: "blocked" | "generic" | "closed" };
+
+async function checkCandidateUrl(url: string, title: string): Promise<CheckResult> {
+  if (isBlockedSource(url)) return { ok: false, reason: "blocked" };
+  if (looksLikeGenericCareersPage(url)) return { ok: false, reason: "generic" };
+  if (await isLikelyClosed(url, title)) return { ok: false, reason: "closed" };
+  return { ok: true };
 }
 
 export async function POST() {
@@ -42,40 +54,52 @@ export async function POST() {
 
   let added = 0;
   let skipped = 0;
+  let recovered = 0;
   let filteredClosed = 0;
   let filteredGeneric = 0;
   let filteredBlockedSource = 0;
 
   // Deterministic backstops on top of the agent's own instructions:
   // 1. Actually fetch each candidate's apply page and look for
-  //    "closed"/"filled" wording, since web search results (especially
-  //    aggregator mirrors) can be stale. A fetch failure or ambiguous page
-  //    defaults to "keep it" — this only filters out postings it's
-  //    confident are dead.
-  // 2. Reject applyUrls that are just a generic careers/jobs landing page
-  //    (no job ID or role-specific slug) — a real case surfaced one of
-  //    these ("snorkel.ai/join-us/") that didn't actually take the user to
-  //    the specific role it claimed to be for.
+  //    "closed"/"filled" wording (plus a title-mention check), since web
+  //    search results (especially aggregator mirrors) can be stale.
+  // 2. Reject applyUrls that are just a generic careers/jobs landing page.
   // 3. Reject known paywalled-application sources (e.g. TheLadders'
-  //    "Apply4Me" upsell) regardless of what the model returns.
-  const closedChecks = await Promise.all(
-    candidates.map((c) => isLikelyClosed(c.applyUrl, c.title))
+  //    "Apply4Me" upsell).
+  // When a candidate fails any of these, it gets one recovery attempt: a
+  // targeted follow-up search for the same role directly on the company's
+  // own careers page/ATS, re-validated through the same checks, rather than
+  // dropping a possibly-good match just because the first link was bad.
+  const initialChecks = await Promise.all(
+    candidates.map((c) => checkCandidateUrl(c.applyUrl, c.title))
   );
 
   for (let i = 0; i < candidates.length; i++) {
-    const candidate = candidates[i];
-    if (isBlockedSource(candidate.applyUrl)) {
-      filteredBlockedSource++;
+    let candidate: JobCandidate = candidates[i];
+    let check = initialChecks[i];
+
+    if (!check.ok) {
+      const directUrl = await findDirectSourceUrl({
+        company: candidate.company,
+        title: candidate.title,
+      });
+      if (directUrl) {
+        const recheck = await checkCandidateUrl(directUrl, candidate.title);
+        if (recheck.ok) {
+          candidate = { ...candidate, applyUrl: directUrl, sourceUrl: directUrl };
+          check = recheck;
+          recovered++;
+        }
+      }
+    }
+
+    if (!check.ok) {
+      if (check.reason === "blocked") filteredBlockedSource++;
+      else if (check.reason === "generic") filteredGeneric++;
+      else filteredClosed++;
       continue;
     }
-    if (looksLikeGenericCareersPage(candidate.applyUrl)) {
-      filteredGeneric++;
-      continue;
-    }
-    if (closedChecks[i]) {
-      filteredClosed++;
-      continue;
-    }
+
     const key = normalize(candidate.company, candidate.title);
     if (knownKeys.has(key)) {
       skipped++;
@@ -105,6 +129,7 @@ export async function POST() {
     found: candidates.length,
     added,
     skipped,
+    recovered,
     filteredClosed,
     filteredGeneric,
     filteredBlockedSource,
