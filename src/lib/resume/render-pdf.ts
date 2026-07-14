@@ -77,7 +77,10 @@ export async function renderResumePdf(
   doc.moveDown(0.5);
 
   // --- Education (two per line, like the base resume) ---
-  sectionHeader(doc, "Education", rightEdge, contentWidth);
+  // No divider under this header — the section is a single tight line, so
+  // a rule directly under the title reads as a stray line rather than a
+  // section break.
+  sectionHeader(doc, "Education", rightEdge, contentWidth, { divider: false });
   for (let i = 0; i < resume.education.length; i += 2) {
     const left = resume.education[i];
     const right = resume.education[i + 1];
@@ -253,18 +256,24 @@ function sectionHeader(
   doc: PDFKit.PDFDocument,
   title: string,
   rightEdge: number,
-  contentWidth: number
+  contentWidth: number,
+  options: { divider?: boolean } = {}
 ) {
+  const showDivider = options.divider ?? true;
   doc.font("Body-Bold").fontSize(SECTION_HEADER_SIZE).fillColor(BLACK);
   doc.text(title.toUpperCase(), PAGE_MARGIN_X, doc.y, { width: contentWidth });
-  const ruleY = doc.y + 1;
-  doc
-    .moveTo(PAGE_MARGIN_X, ruleY)
-    .lineTo(rightEdge, ruleY)
-    .lineWidth(1)
-    .strokeColor(BLUE)
-    .stroke();
-  doc.y = ruleY + 4;
+  if (showDivider) {
+    const ruleY = doc.y + 1;
+    doc
+      .moveTo(PAGE_MARGIN_X, ruleY)
+      .lineTo(rightEdge, ruleY)
+      .lineWidth(1)
+      .strokeColor(BLUE)
+      .stroke();
+    doc.y = ruleY + 4;
+  } else {
+    doc.y = doc.y + 4;
+  }
   doc.x = PAGE_MARGIN_X;
 }
 
