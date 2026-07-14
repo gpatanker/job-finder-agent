@@ -8,8 +8,8 @@ const NAV_ITEMS = [
   { href: "/pipeline", label: "Pipeline", enabled: true },
   { href: "/tailor", label: "Resume Tailor", enabled: true },
   { href: "/packet", label: "Application Packet", enabled: true },
-  { href: "/apply-agent", label: "Apply Agent", enabled: false },
-  { href: "/run-queue", label: "Run Queue", enabled: false },
+  { href: "/apply-agent", label: "Apply Agent", enabled: true },
+  { href: "/run-queue", label: "Run Queue", enabled: true },
   { href: "/search", label: "Search / Import", enabled: false },
   { href: "/settings", label: "Settings", enabled: true },
 ];
