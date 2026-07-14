@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { candidateProfile, jobSearchSuggestions, jobs } from "@/lib/db/schema";
 import { findJobCandidates } from "@/lib/search/job-search-agent";
+import { isLikelyClosed } from "@/lib/search/freshness-check";
 
 function normalize(company: string, title: string): string {
   return `${company}|${title}`.toLowerCase().replace(/\s+/g, " ").trim();
@@ -39,7 +40,23 @@ export async function POST() {
 
   let added = 0;
   let skipped = 0;
-  for (const candidate of candidates) {
+  let filteredClosed = 0;
+
+  // Deterministic backstop on top of the agent's own instructions: actually
+  // fetch each candidate's apply page and look for "closed"/"filled"
+  // wording, since web search results (especially aggregator mirrors) can
+  // be stale. A fetch failure or ambiguous page defaults to "keep it" —
+  // this only filters out postings it's confident are dead.
+  const closedChecks = await Promise.all(
+    candidates.map((c) => isLikelyClosed(c.applyUrl))
+  );
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i];
+    if (closedChecks[i]) {
+      filteredClosed++;
+      continue;
+    }
     const key = normalize(candidate.company, candidate.title);
     if (knownKeys.has(key)) {
       skipped++;
@@ -69,6 +86,7 @@ export async function POST() {
     found: candidates.length,
     added,
     skipped,
+    filteredClosed,
     warning,
     suggestions,
   });

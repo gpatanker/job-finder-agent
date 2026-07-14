@@ -20,7 +20,10 @@ export function SearchClient({
       if (!res.ok) throw new Error(body.error ?? "Search failed");
       setSuggestions(body.suggestions);
       if (body.warning) toast.warning(body.warning);
-      toast.success(`Found ${body.found}, added ${body.added} new suggestions (${body.skipped} already known)`);
+      const closedNote = body.filteredClosed > 0 ? `, ${body.filteredClosed} filtered as likely closed` : "";
+      toast.success(
+        `Found ${body.found}, added ${body.added} new suggestions (${body.skipped} already known${closedNote})`
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Search failed");
     } finally {

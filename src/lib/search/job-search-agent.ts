@@ -90,6 +90,8 @@ export async function findJobCandidates(params: {
 
 Rules:
 - Only include postings you actually found via web_search in this conversation, with a real applyUrl/sourceUrl from the search results. Never fabricate a posting or guess a URL.
+- Strongly prefer the original source: the company's own careers page or their ATS (Greenhouse, Ashby, Lever, etc.) directly. Avoid third-party job-board aggregators/mirrors (e.g. dealhub-style "revpath" sites, other scraped listing aggregators) when the original posting is findable — aggregators frequently keep mirroring listings after the original has closed.
+- If a search result's page indicates the posting is closed, filled, or expired (e.g. "no longer accepting applications", "position is probably filled"), skip it — do not include it.
 - Prioritize the candidate's stated role families, locations, salary floor, and preferred industries.
 - Skip anything already in the candidate's known-jobs list below (avoid near-duplicates by company+title).
 - Do not tailor everything to any single company — search broadly across the stated preferred industries.
