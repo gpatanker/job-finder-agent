@@ -77,10 +77,7 @@ export async function renderResumePdf(
   doc.moveDown(0.5);
 
   // --- Education (two per line, like the base resume) ---
-  // No divider under this header — the section is a single tight line, so
-  // a rule directly under the title reads as a stray line rather than a
-  // section break.
-  sectionHeader(doc, "Education", rightEdge, contentWidth, { divider: false });
+  sectionHeader(doc, "EDUCATION", contentWidth);
   for (let i = 0; i < resume.education.length; i += 2) {
     const left = resume.education[i];
     const right = resume.education[i + 1];
@@ -106,7 +103,7 @@ export async function renderResumePdf(
   doc.moveDown(0.5);
 
   // --- Professional Experience ---
-  sectionHeader(doc, "Professional Experience", rightEdge, contentWidth);
+  sectionHeader(doc, "PROFESSIONAL EXPERIENCE", contentWidth);
   resume.experience.forEach((exp, idx) => {
     const headerLeft = [exp.company, exp.role, exp.team, exp.location]
       .filter(Boolean)
@@ -132,8 +129,13 @@ export async function renderResumePdf(
   doc.moveDown(0.4);
 
   // --- Projects ---
+  // Each blue rule closes out the *previous* section and precedes the next
+  // header — matching the base resume, where rules never sit directly under
+  // a header's own title.
   if (resume.projects.length > 0) {
-    sectionHeader(doc, "Projects", rightEdge, contentWidth);
+    divider(doc, rightEdge);
+    doc.moveDown(0.15);
+    sectionHeader(doc, "PROJECTS", contentWidth);
     resume.projects.forEach((project) => {
       const headerLeft = [project.name, project.org]
         .filter(Boolean)
@@ -157,7 +159,9 @@ export async function renderResumePdf(
   }
 
   // --- Skills ---
-  sectionHeader(doc, "Skills", rightEdge, contentWidth);
+  divider(doc, rightEdge);
+  doc.moveDown(0.15);
+  sectionHeader(doc, "SKILLS", contentWidth);
   resume.skills.forEach((skill) => {
     const startY = doc.y;
     doc.font("Body-Bold").fontSize(BODY_SIZE).fillColor(BLACK);
@@ -173,8 +177,12 @@ export async function renderResumePdf(
   doc.moveDown(0.4);
 
   // --- Certifications ---
+  // Title is deliberately mixed-case ("Certifications", not "CERTIFICATIONS")
+  // to match the base resume exactly — every other header is all-caps.
   if (resume.certifications.length > 0) {
-    sectionHeader(doc, "Certifications", rightEdge, contentWidth);
+    divider(doc, rightEdge);
+    doc.moveDown(0.15);
+    sectionHeader(doc, "Certifications", contentWidth);
     doc.font("Body-Bold").fontSize(BODY_SIZE).fillColor(BLACK);
     doc.text("Certifications: ", PAGE_MARGIN_X, doc.y, {
       continued: true,
@@ -252,28 +260,12 @@ function divider(doc: PDFKit.PDFDocument, rightEdge: number) {
     .stroke();
 }
 
-function sectionHeader(
-  doc: PDFKit.PDFDocument,
-  title: string,
-  rightEdge: number,
-  contentWidth: number,
-  options: { divider?: boolean } = {}
-) {
-  const showDivider = options.divider ?? true;
+// Headers never carry their own divider — see the call sites above for where
+// blue rules actually fall (as closing dividers between sections).
+function sectionHeader(doc: PDFKit.PDFDocument, title: string, contentWidth: number) {
   doc.font("Body-Bold").fontSize(SECTION_HEADER_SIZE).fillColor(BLACK);
-  doc.text(title.toUpperCase(), PAGE_MARGIN_X, doc.y, { width: contentWidth });
-  if (showDivider) {
-    const ruleY = doc.y + 1;
-    doc
-      .moveTo(PAGE_MARGIN_X, ruleY)
-      .lineTo(rightEdge, ruleY)
-      .lineWidth(1)
-      .strokeColor(BLUE)
-      .stroke();
-    doc.y = ruleY + 4;
-  } else {
-    doc.y = doc.y + 4;
-  }
+  doc.text(title, PAGE_MARGIN_X, doc.y, { width: contentWidth });
+  doc.y = doc.y + 4;
   doc.x = PAGE_MARGIN_X;
 }
 
