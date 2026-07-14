@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { buildApplyRunBrief } from "./brief";
-import type { ApplicationQuestion, CandidateProfile, Job } from "@/lib/db/schema";
+import type {
+  ApplicationQuestion,
+  CandidateProfile,
+  Job,
+  ResumeExperienceEntry,
+} from "@/lib/db/schema";
 
 const job = {
   id: "job-1",
@@ -39,7 +44,7 @@ const profile = {
   email: "jordan@example.com",
   phone: "555-0100",
   linkedin: "https://linkedin.com/in/jordan",
-  location: "Austin, TX",
+  location: "Austin, TX, United States",
   currentCompany: "Example Corp",
   functionTags: [],
   preferredIndustries: [],
@@ -49,11 +54,26 @@ const profile = {
   raceEthnicity: null,
   sexualOrientation: null,
   veteranStatus: null,
+  disabilityStatus: null,
+  zipCode: null,
+  highestEducationLevel: null,
+  requiresRelocationAssistance: false,
+  howHeardDefault: null,
+  aiPolicyAgreement: null,
   education: [{ school: "State University", degree: "B.S." }],
   searchCriteria: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 } satisfies CandidateProfile;
+
+const experience: ResumeExperienceEntry[] = [
+  {
+    company: "Example Corp",
+    role: "Analyst",
+    dateRange: "Jan 2022 – Present",
+    bullets: [],
+  },
+];
 
 const approvedQuestion = {
   id: "q-1",
@@ -71,6 +91,7 @@ describe("buildApplyRunBrief", () => {
     const brief = buildApplyRunBrief({
       job,
       profile,
+      experience,
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: "/api/resumes/acme-analyst",
@@ -83,6 +104,7 @@ describe("buildApplyRunBrief", () => {
     const brief = buildApplyRunBrief({
       job,
       profile,
+      experience,
       approvedQuestions: [],
       submitAuthorized: true,
       resumeRoute: "/api/resumes/acme-analyst",
@@ -94,6 +116,7 @@ describe("buildApplyRunBrief", () => {
     const brief = buildApplyRunBrief({
       job,
       profile,
+      experience,
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: "/api/resumes/acme-analyst",
@@ -107,6 +130,7 @@ describe("buildApplyRunBrief", () => {
     const brief = buildApplyRunBrief({
       job,
       profile,
+      experience,
       approvedQuestions: [approvedQuestion],
       submitAuthorized: false,
       resumeRoute: null,
@@ -119,6 +143,7 @@ describe("buildApplyRunBrief", () => {
     const brief = buildApplyRunBrief({
       job,
       profile,
+      experience,
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
@@ -130,6 +155,7 @@ describe("buildApplyRunBrief", () => {
     const brief = buildApplyRunBrief({
       job,
       profile,
+      experience,
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
@@ -142,18 +168,71 @@ describe("buildApplyRunBrief", () => {
       job,
       profile: {
         ...profile,
-        genderIdentity: "Male",
-        raceEthnicity: "Asian (South Asian); not Hispanic or Latino",
-        sexualOrientation: "Heterosexual / Straight",
-        veteranStatus: "Not a veteran",
+        genderIdentity: "Woman",
+        raceEthnicity: "White; not Hispanic or Latino",
+        sexualOrientation: "Bisexual",
+        veteranStatus: "Protected veteran",
+        disabilityStatus: "Yes, I have a disability",
       },
+      experience,
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
     });
-    expect(brief).toContain("Gender identity: Male");
-    expect(brief).toContain("Race / ethnicity: Asian (South Asian); not Hispanic or Latino");
-    expect(brief).toContain("Sexual orientation: Heterosexual / Straight");
-    expect(brief).toContain("Veteran status: Not a veteran");
+    expect(brief).toContain("Gender identity: Woman");
+    expect(brief).toContain("Race / ethnicity: White; not Hispanic or Latino");
+    expect(brief).toContain("Sexual orientation: Bisexual");
+    expect(brief).toContain("Veteran status: Protected veteran");
+    expect(brief).toContain("Disability status: Yes, I have a disability");
+  });
+
+  it("never auto-answers an experience-years threshold question — always instructs a pause instead", () => {
+    const brief = buildApplyRunBrief({
+      job,
+      profile,
+      experience,
+      approvedQuestions: [],
+      submitAuthorized: false,
+      resumeRoute: null,
+    });
+    expect(brief).toContain("do NOT answer automatically");
+    expect(brief).toContain("Pause, show the user the threshold asked and this computed total");
+  });
+
+  it("detects that the candidate has previously worked at the company being applied to", () => {
+    const brief = buildApplyRunBrief({
+      job: { ...job, company: "Example Corp" },
+      profile,
+      experience,
+      approvedQuestions: [],
+      submitAuthorized: false,
+      resumeRoute: null,
+    });
+    expect(brief).toContain("Previously worked at Example Corp: Yes");
+  });
+
+  it("says no when the company being applied to isn't in the work history", () => {
+    const brief = buildApplyRunBrief({
+      job: { ...job, company: "Some New Company" },
+      profile,
+      experience,
+      approvedQuestions: [],
+      submitAuthorized: false,
+      resumeRoute: null,
+    });
+    expect(brief).toContain("Previously worked at Some New Company: No");
+  });
+
+  it("flags common structured fields as not-on-file when unset, rather than guessing", () => {
+    const brief = buildApplyRunBrief({
+      job,
+      profile,
+      experience,
+      approvedQuestions: [],
+      submitAuthorized: false,
+      resumeRoute: null,
+    });
+    expect(brief).toContain("Zip code of primary residence: Not on file");
+    expect(brief).toContain('"How did you hear about this opportunity?" default: Not on file');
   });
 });

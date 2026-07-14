@@ -13,6 +13,12 @@
   "raceEthnicity": "",
   "sexualOrientation": "",
   "veteranStatus": "",
+  "disabilityStatus": "",
+  "zipCode": "",
+  "highestEducationLevel": "",
+  "requiresRelocationAssistance": false,
+  "howHeardDefault": "",
+  "aiPolicyAgreement": "",
   "education": [
     { "school": "State University", "degree": "B.S. in Business Administration" }
   ],

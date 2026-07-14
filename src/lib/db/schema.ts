@@ -127,6 +127,18 @@ export const candidateProfile = pgTable("candidate_profile", {
   raceEthnicity: text("race_ethnicity"),
   sexualOrientation: text("sexual_orientation"),
   veteranStatus: text("veteran_status"),
+  disabilityStatus: text("disability_status"),
+  // Structured application-form fields that recur across ATS platforms but
+  // aren't "candidate-written prompts" (no essay text to draft) — filling
+  // these in once here lets the Apply Run Brief answer them directly
+  // instead of the Computer having to pause and ask on every application.
+  zipCode: text("zip_code"),
+  highestEducationLevel: text("highest_education_level"),
+  requiresRelocationAssistance: boolean("requires_relocation_assistance")
+    .notNull()
+    .default(false),
+  howHeardDefault: text("how_heard_default"),
+  aiPolicyAgreement: text("ai_policy_agreement"),
   education: jsonb("education").$type<EducationEntry[]>().notNull().default([]),
   searchCriteria: jsonb("search_criteria").$type<SearchCriteria>(),
   createdAt: timestamp("created_at", { withTimezone: true })

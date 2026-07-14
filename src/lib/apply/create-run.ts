@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { agentRunQueue, jobs } from "@/lib/db/schema";
+import { agentRunQueue, jobs, resumeProfile } from "@/lib/db/schema";
 import { buildApplyRunBrief } from "./brief";
 import { getApprovedQuestions, getCandidateProfileOrThrow } from "./data";
 
@@ -52,9 +52,11 @@ export async function createAgentRun(params: {
   }
 
   const approvedQuestions = await getApprovedQuestions(jobId);
+  const [resume] = await db.select().from(resumeProfile).limit(1);
   const brief = buildApplyRunBrief({
     job,
     profile,
+    experience: resume?.data.experience ?? [],
     approvedQuestions,
     submitAuthorized,
     resumeRoute: job.tailoredResumeSlug ? `/api/resumes/${job.tailoredResumeSlug}` : null,

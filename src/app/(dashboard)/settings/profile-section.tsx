@@ -44,6 +44,20 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
     profile?.sexualOrientation ?? ""
   );
   const [veteranStatus, setVeteranStatus] = useState(profile?.veteranStatus ?? "");
+  const [disabilityStatus, setDisabilityStatus] = useState(
+    profile?.disabilityStatus ?? ""
+  );
+  const [zipCode, setZipCode] = useState(profile?.zipCode ?? "");
+  const [highestEducationLevel, setHighestEducationLevel] = useState(
+    profile?.highestEducationLevel ?? ""
+  );
+  const [requiresRelocationAssistance, setRequiresRelocationAssistance] = useState(
+    profile?.requiresRelocationAssistance ?? false
+  );
+  const [howHeardDefault, setHowHeardDefault] = useState(profile?.howHeardDefault ?? "");
+  const [aiPolicyAgreement, setAiPolicyAgreement] = useState(
+    profile?.aiPolicyAgreement ?? ""
+  );
   const [education, setEducation] = useState<EducationEntry[]>(
     profile?.education?.length ? profile.education : [{ school: "", degree: "" }]
   );
@@ -89,6 +103,12 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
           raceEthnicity: raceEthnicity || undefined,
           sexualOrientation: sexualOrientation || undefined,
           veteranStatus: veteranStatus || undefined,
+          disabilityStatus: disabilityStatus || undefined,
+          zipCode: zipCode || undefined,
+          highestEducationLevel: highestEducationLevel || undefined,
+          requiresRelocationAssistance,
+          howHeardDefault: howHeardDefault || undefined,
+          aiPolicyAgreement: aiPolicyAgreement || undefined,
           education: education.filter((e) => e.school || e.degree),
           searchCriteria: {
             roleFamilies: fromCsv(roleFamilies),
@@ -207,7 +227,68 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
               onChange={(e) => setVeteranStatus(e.target.value)}
             />
           </div>
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">Disability status</label>
+            <input
+              className={inputClass}
+              value={disabilityStatus}
+              onChange={(e) => setDisabilityStatus(e.target.value)}
+            />
+          </div>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-black/10 p-3 dark:border-white/15">
+        <p className="mb-1 text-sm font-medium">Common application fields</p>
+        <p className="mb-2 text-xs text-black/60 dark:text-white/60">
+          Recurring structured questions (dropdowns/short fields, not essay prompts) across ATS
+          platforms — filling these in lets the Apply Run Brief answer them directly instead of
+          the Computer pausing to ask on every application.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">Zip code</label>
+            <input className={inputClass} value={zipCode} onChange={(e) => setZipCode(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">Highest education level</label>
+            <input
+              className={inputClass}
+              placeholder="e.g. Master's Degree"
+              value={highestEducationLevel}
+              onChange={(e) => setHighestEducationLevel(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">
+              &ldquo;How did you hear about this opportunity?&rdquo; default
+            </label>
+            <input
+              className={inputClass}
+              value={howHeardDefault}
+              onChange={(e) => setHowHeardDefault(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">
+              AI interview-policy agreement default
+            </label>
+            <input
+              className={inputClass}
+              placeholder="e.g. Yes, I agree"
+              value={aiPolicyAgreement}
+              onChange={(e) => setAiPolicyAgreement(e.target.value)}
+            />
+          </div>
+        </div>
+        <label className="mt-3 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={requiresRelocationAssistance}
+            onChange={(e) => setRequiresRelocationAssistance(e.target.checked)}
+          />
+          Requires relocation assistance
+        </label>
       </div>
 
       <div className="space-y-2">

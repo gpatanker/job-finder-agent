@@ -36,6 +36,13 @@
       "when": 1784013687414,
       "tag": "0004_bitter_human_robot",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784014276023,
+      "tag": "0005_mature_the_anarchist",
+      "breakpoints": true
     }
   ]
 }

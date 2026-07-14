@@ -27,6 +27,12 @@ export const updateCandidateProfileSchema = z.object({
   raceEthnicity: z.string().trim().optional(),
   sexualOrientation: z.string().trim().optional(),
   veteranStatus: z.string().trim().optional(),
+  disabilityStatus: z.string().trim().optional(),
+  zipCode: z.string().trim().optional(),
+  highestEducationLevel: z.string().trim().optional(),
+  requiresRelocationAssistance: z.boolean(),
+  howHeardDefault: z.string().trim().optional(),
+  aiPolicyAgreement: z.string().trim().optional(),
   education: z.array(educationEntrySchema),
   searchCriteria: searchCriteriaSchema,
 });

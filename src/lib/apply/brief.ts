@@ -1,4 +1,5 @@
-import type { ApplicationQuestion, CandidateProfile, Job } from "@/lib/db/schema";
+import type { ApplicationQuestion, CandidateProfile, Job, ResumeExperienceEntry } from "@/lib/db/schema";
+import { formatExperienceSummary } from "./experience";
 
 function formatSalary(job: Job): string {
   if (job.salaryText) return job.salaryText;
@@ -16,6 +17,7 @@ function formatDemographics(profile: CandidateProfile): string {
     ["Race / ethnicity", profile.raceEthnicity],
     ["Sexual orientation", profile.sexualOrientation],
     ["Veteran status", profile.veteranStatus],
+    ["Disability status", profile.disabilityStatus],
   ];
   return fields
     .map(([label, value]) =>
@@ -26,14 +28,42 @@ function formatDemographics(profile: CandidateProfile): string {
     .join("\n");
 }
 
+function residesInUnitedStates(profile: CandidateProfile): boolean {
+  return /united states|\bUSA\b|\bU\.S\.?A?\.?\b/i.test(profile.location ?? "");
+}
+
+function formatStructuredAnswers(
+  profile: CandidateProfile,
+  experience: ResumeExperienceEntry[],
+  companyName: string
+): string {
+  const experienceSummary = formatExperienceSummary(experience);
+  const knownCompanies = experience.map((e) => e.company);
+  const previouslyWorkedHere = knownCompanies.some(
+    (c) => c.trim().toLowerCase() === companyName.trim().toLowerCase()
+  );
+
+  return [
+    `- Resides in the United States: ${residesInUnitedStates(profile) ? "Yes" : "No — pause and confirm with the user before answering location/residency questions"}`,
+    `- Requires relocation assistance: ${profile.requiresRelocationAssistance ? "Yes" : "No"}`,
+    `- Highest level of education: ${profile.highestEducationLevel ?? "Not on file — pause and ask the user, or infer conservatively from the education list above"}`,
+    `- Zip code of primary residence: ${profile.zipCode ?? "Not on file — pause and ask the user"}`,
+    `- Total professional experience (computed from resume dates): ${experienceSummary} — for any "do you have at least N years of experience" question, do NOT answer automatically: this is a judgment call that can affect eligibility. Pause, show the user the threshold asked and this computed total, and ask how to answer.`,
+    `- Previously worked at ${companyName}: ${previouslyWorkedHere ? "Yes" : "No"} (based on the work-history company list: ${knownCompanies.join(", ") || "none on file"})`,
+    `- "How did you hear about this opportunity?" default: ${profile.howHeardDefault ?? "Not on file — pause and ask the user"}`,
+    `- AI-tool-use policy agreement (if the application asks you to agree not to use AI during interviews): ${profile.aiPolicyAgreement ?? "Not on file — pause and ask the user"}`,
+  ].join("\n");
+}
+
 export function buildApplyRunBrief(params: {
   job: Job;
   profile: CandidateProfile;
+  experience: ResumeExperienceEntry[];
   approvedQuestions: ApplicationQuestion[];
   submitAuthorized: boolean;
   resumeRoute: string | null;
 }): string {
-  const { job, profile, approvedQuestions, submitAuthorized, resumeRoute } = params;
+  const { job, profile, experience, approvedQuestions, submitAuthorized, resumeRoute } = params;
 
   const submitBlock = submitAuthorized
     ? "SUBMIT AUTHORIZATION: The user has explicitly authorized you to submit this application. You may complete the final submit step."
@@ -72,6 +102,9 @@ CANDIDATE BASICS
 - Work authorization: ${profile.workAuthorized ? "Yes, legally authorized to work in the United States" : "Not authorized — pause and ask the user"}
 - Sponsorship: ${profile.requiresSponsorship ? "Yes, will now or in the future require visa sponsorship" : "No sponsorship required"}
 
+COMMON STRUCTURED FIELDS (dropdowns/short fields, not essay prompts — answer directly rather than pausing, except where noted)
+${formatStructuredAnswers(profile, experience, job.company)}
+
 OPTIONAL DEMOGRAPHIC / EEO QUESTIONS (only if the application asks — these are always optional under EEO law, never a reason to stop)
 ${formatDemographics(profile)}
 
@@ -82,6 +115,8 @@ OPERATING RULES FOR COMPUTER
 1. Open the apply link and begin the application.
 2. Upload the tailored resume PDF where a resume is requested.
 3. Fill candidate basics and paste approved answers verbatim where they fit.
-4. For any field not covered above, pause and ask the user rather than guessing.
-5. If submit authorization is included, submit only if all required fields are covered and the application form matches the packet.`;
+4. Use the common structured fields above for their matching dropdowns/short fields — pick the closest matching option the form actually offers, never a fabricated one.
+5. For any field not covered above, pause and ask the user rather than guessing.
+6. For any eligibility-gate question where the honest answer could disqualify the application (e.g. an experience-years threshold) and isn't a plain fact already given above, pause and ask the user how to answer — never decide this one yourself, in either direction.
+7. If submit authorization is included, submit only if all required fields are covered and the application form matches the packet.`;
 }
