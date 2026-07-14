@@ -49,3 +49,8 @@ next-env.d.ts
 !/local/README.md
 /generated/
 *.local.json
+
+# local-only MCP config (browser-automation server for running queued
+# applications) — a personal dev-machine convenience, not part of the app
+.mcp.json
+.playwright-mcp/
