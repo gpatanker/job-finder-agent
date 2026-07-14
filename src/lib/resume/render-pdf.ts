@@ -10,10 +10,10 @@ const BLUE = "#1F4E79";
 const BLACK = "#111111";
 
 const NAME_SIZE = 20;
-const CONTACT_SIZE = 9.5;
-const SECTION_HEADER_SIZE = 11;
-const SUBHEADER_SIZE = 9.5;
-const BODY_SIZE = 9.3;
+const CONTACT_SIZE = 10;
+const SECTION_HEADER_SIZE = 12;
+const SUBHEADER_SIZE = 10;
+const BODY_SIZE = 10;
 
 const fontsDir = path.join(process.cwd(), "assets", "fonts");
 const FONTS = {
@@ -70,15 +70,11 @@ export async function renderResumePdf(
     align: "center",
   });
 
-  doc.font("Body").fontSize(CONTACT_SIZE).fillColor(BLACK);
-  doc.text(resume.contactLine, PAGE_MARGIN_X, doc.y + 2, {
-    width: contentWidth,
-    align: "center",
-  });
+  writeContactLine(doc, resume.contactLine, PAGE_MARGIN_X, doc.y + 2, contentWidth);
 
-  doc.moveDown(0.3);
+  doc.moveDown(0.5);
   divider(doc, rightEdge);
-  doc.moveDown(0.4);
+  doc.moveDown(0.5);
 
   // --- Education (two per line, like the base resume) ---
   sectionHeader(doc, "Education", rightEdge, contentWidth);
@@ -104,7 +100,7 @@ export async function renderResumePdf(
     doc.x = PAGE_MARGIN_X;
     doc.y = startY + lineHeight + 2;
   }
-  doc.moveDown(0.3);
+  doc.moveDown(0.5);
 
   // --- Professional Experience ---
   sectionHeader(doc, "Professional Experience", rightEdge, contentWidth);
@@ -121,15 +117,16 @@ export async function renderResumePdf(
       contentWidth,
       SUBHEADER_SIZE
     );
-    doc.moveDown(0.15);
+    doc.moveDown(0.25);
 
     exp.bullets.forEach((bullet) => {
       writeBullet(doc, bullet.text, PAGE_MARGIN_X, contentWidth);
+      doc.moveDown(0.12);
     });
 
-    if (idx < resume.experience.length - 1) doc.moveDown(0.35);
+    if (idx < resume.experience.length - 1) doc.moveDown(0.4);
   });
-  doc.moveDown(0.3);
+  doc.moveDown(0.4);
 
   // --- Projects ---
   if (resume.projects.length > 0) {
@@ -147,12 +144,13 @@ export async function renderResumePdf(
         contentWidth,
         SUBHEADER_SIZE
       );
-      doc.moveDown(0.15);
+      doc.moveDown(0.25);
       project.bullets.forEach((bulletText) => {
         writeBullet(doc, bulletText, PAGE_MARGIN_X, contentWidth);
+        doc.moveDown(0.12);
       });
     });
-    doc.moveDown(0.3);
+    doc.moveDown(0.4);
   }
 
   // --- Skills ---
@@ -167,8 +165,9 @@ export async function renderResumePdf(
     });
     doc.font("Body").fontSize(BODY_SIZE);
     doc.text(skill.items.join(", "));
+    doc.moveDown(0.12);
   });
-  doc.moveDown(0.3);
+  doc.moveDown(0.4);
 
   // --- Certifications ---
   if (resume.certifications.length > 0) {
@@ -184,6 +183,60 @@ export async function renderResumePdf(
 
   doc.end();
   return done;
+}
+
+/** Renders the centered contact line, underlining/linking a LinkedIn URL if present (matches the base resume's hyperlinked LinkedIn styling). */
+function writeContactLine(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  pageMarginX: number,
+  y: number,
+  contentWidth: number
+) {
+  doc.font("Body").fontSize(CONTACT_SIZE).fillColor(BLACK);
+
+  const linkMatch = text.match(/\S*linkedin\.com\S*/i);
+  if (!linkMatch) {
+    doc.text(text, pageMarginX, y, { width: contentWidth, align: "center" });
+    return;
+  }
+
+  const linkText = linkMatch[0];
+  const idx = text.indexOf(linkText);
+  const before = text.slice(0, idx);
+  const after = text.slice(idx + linkText.length);
+  const url = linkText.startsWith("http") ? linkText : `https://${linkText}`;
+
+  const beforeWidth = doc.widthOfString(before);
+  const linkWidth = doc.widthOfString(linkText);
+  const afterWidth = doc.widthOfString(after);
+  const totalWidth = beforeWidth + linkWidth + afterWidth;
+  const startX = pageMarginX + (contentWidth - totalWidth) / 2;
+  const lineHeight = doc.currentLineHeight();
+
+  doc.text(before, startX, y, { continued: true, lineBreak: false });
+  doc.text(linkText, { continued: true, lineBreak: false });
+  doc.text(after, { lineBreak: false });
+  // The final segment uses lineBreak:false (so it doesn't wrap/continue),
+  // which also means pdfkit won't auto-advance the cursor past this line —
+  // do it explicitly so later content doesn't overlap this line.
+  doc.x = pageMarginX;
+  doc.y = y + lineHeight;
+
+  // Underline + clickable annotation are drawn manually rather than via
+  // pdfkit's inline `underline`/`link` text options — combining those with
+  // `continued: true` produces an invalid (NaN) annotation rectangle.
+  const linkX = startX + beforeWidth;
+  const underlineY = y + lineHeight - 2;
+  doc
+    .save()
+    .lineWidth(0.5)
+    .strokeColor(BLACK)
+    .moveTo(linkX, underlineY)
+    .lineTo(linkX + linkWidth, underlineY)
+    .stroke()
+    .restore();
+  doc.link(linkX, y, linkWidth, lineHeight, url);
 }
 
 function divider(doc: PDFKit.PDFDocument, rightEdge: number) {
