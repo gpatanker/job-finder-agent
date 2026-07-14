@@ -12,9 +12,8 @@ import { fetchHtml, type ScrapeResult } from "./types";
  * dropdowns) are excluded via isStandardField + a question-like heuristic so
  * we don't surface "LinkedIn Profile" as a candidate-written prompt.
  */
-export async function scrapeGreenhouse(url: string): Promise<ScrapeResult> {
+export function parseGreenhouseHtml(html: string): ScrapeResult {
   const warnings: string[] = [];
-  const html = await fetchHtml(url);
   const $ = cheerio.load(html);
 
   const seen = new Set<string>();
@@ -63,4 +62,9 @@ export async function scrapeGreenhouse(url: string): Promise<ScrapeResult> {
   }
 
   return { questions, source: "greenhouse", warnings };
+}
+
+export async function scrapeGreenhouse(url: string): Promise<ScrapeResult> {
+  const html = await fetchHtml(url);
+  return parseGreenhouseHtml(html);
 }

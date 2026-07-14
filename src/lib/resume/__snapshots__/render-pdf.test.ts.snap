@@ -1,0 +1,24 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderResumePdf > golden master: extracted text matches the last known-good layout exactly 1`] = `
+"Jordan Example
+(555) 555-0100 - jordan.example@example.com - linkedin.com/in/jordan-example/
+EDUCATION
+State University | B.S. in Business Administration Other College | A.A. in Something
+PROFESSIONAL EXPERIENCE
+Example Corp – Business Operations Analyst – Strategy Team – Austin, TX Jan 2023 – Present
+• Reduced quarterly reporting cycle time by 30% by building a Python-based validation pipeline for sales data.
+• Partnered with vendors to negotiate a 15% cost reduction on cloud infrastructure spend.
+PROJECTS
+Capstone Project – State University 2022
+• Built a data pipeline for athlete performance tracking.
+SKILLS
+Analytics: SQL, Python, Tableau
+Tools: Excel, JIRA
+CERTIFICATIONS
+Certifications: Example Certification
+
+-- 1 of 1 --
+
+"
+`;

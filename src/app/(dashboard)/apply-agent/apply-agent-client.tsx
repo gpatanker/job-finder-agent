@@ -25,13 +25,21 @@ function ApplyAgentCard({
   const complete = isChecklistComplete(checklist);
 
   async function toggleReviewConfirmed() {
-    const res = await fetch(`/api/jobs/${job.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ applyReviewConfirmed: !job.applyReviewConfirmed }),
-    });
-    const body = await res.json();
-    if (res.ok) setJob(body.job);
+    const next = !job.applyReviewConfirmed;
+    setJob((j) => ({ ...j, applyReviewConfirmed: next })); // optimistic; controlled checkbox would otherwise flicker back until the PATCH resolves
+    try {
+      const res = await fetch(`/api/jobs/${job.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applyReviewConfirmed: next }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to update");
+      setJob(body.job);
+    } catch (err) {
+      setJob((j) => ({ ...j, applyReviewConfirmed: !next }));
+      toast.error(err instanceof Error ? err.message : "Failed to update");
+    }
   }
 
   async function loadBrief() {

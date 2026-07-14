@@ -15,6 +15,7 @@ export function extractKeywords(text: string, limit = 40): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9+.\s-]/g, " ")
     .split(/\s+/)
+    .map((t) => t.replace(/^[.-]+|[.-]+$/g, ""))
     .filter((t) => t.length > 2 && !STOPWORDS.has(t));
 
   for (const token of tokens) {

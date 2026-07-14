@@ -7,9 +7,8 @@ import { fetchHtml, type ScrapeResult } from "./types";
  * signal for a candidate-written prompt) with a label found via aria-label,
  * label[for], a wrapping <label>, or a preceding sibling label-like element.
  */
-export async function scrapeGeneric(url: string): Promise<ScrapeResult> {
+export function parseGenericHtml(html: string): ScrapeResult {
   const warnings: string[] = [];
-  const html = await fetchHtml(url);
   const $ = cheerio.load(html);
 
   const seen = new Set<string>();
@@ -41,4 +40,9 @@ export async function scrapeGeneric(url: string): Promise<ScrapeResult> {
   }
 
   return { questions, source: "generic", warnings };
+}
+
+export async function scrapeGeneric(url: string): Promise<ScrapeResult> {
+  const html = await fetchHtml(url);
+  return parseGenericHtml(html);
 }
