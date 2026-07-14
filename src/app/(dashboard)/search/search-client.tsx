@@ -24,6 +24,9 @@ export function SearchClient({
         body.skipped > 0 ? `${body.skipped} already known` : null,
         body.filteredClosed > 0 ? `${body.filteredClosed} filtered as likely closed` : null,
         body.filteredGeneric > 0 ? `${body.filteredGeneric} filtered — link wasn't a specific posting` : null,
+        body.filteredBlockedSource > 0
+          ? `${body.filteredBlockedSource} filtered — source requires payment to apply`
+          : null,
       ].filter(Boolean);
       toast.success(
         `Found ${body.found}, added ${body.added} new suggestions${notes.length ? ` (${notes.join(", ")})` : ""}`

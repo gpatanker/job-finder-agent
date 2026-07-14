@@ -5,6 +5,7 @@ import { candidateProfile, jobSearchSuggestions, jobs } from "@/lib/db/schema";
 import { findJobCandidates } from "@/lib/search/job-search-agent";
 import { isLikelyClosed } from "@/lib/search/freshness-check";
 import { looksLikeGenericCareersPage } from "@/lib/search/specificity-check";
+import { isBlockedSource } from "@/lib/search/blocked-sources";
 
 function normalize(company: string, title: string): string {
   return `${company}|${title}`.toLowerCase().replace(/\s+/g, " ").trim();
@@ -43,6 +44,7 @@ export async function POST() {
   let skipped = 0;
   let filteredClosed = 0;
   let filteredGeneric = 0;
+  let filteredBlockedSource = 0;
 
   // Deterministic backstops on top of the agent's own instructions:
   // 1. Actually fetch each candidate's apply page and look for
@@ -54,12 +56,18 @@ export async function POST() {
   //    (no job ID or role-specific slug) — a real case surfaced one of
   //    these ("snorkel.ai/join-us/") that didn't actually take the user to
   //    the specific role it claimed to be for.
+  // 3. Reject known paywalled-application sources (e.g. TheLadders'
+  //    "Apply4Me" upsell) regardless of what the model returns.
   const closedChecks = await Promise.all(
     candidates.map((c) => isLikelyClosed(c.applyUrl, c.title))
   );
 
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
+    if (isBlockedSource(candidate.applyUrl)) {
+      filteredBlockedSource++;
+      continue;
+    }
     if (looksLikeGenericCareersPage(candidate.applyUrl)) {
       filteredGeneric++;
       continue;
@@ -99,6 +107,7 @@ export async function POST() {
     skipped,
     filteredClosed,
     filteredGeneric,
+    filteredBlockedSource,
     warning,
     suggestions,
   });
