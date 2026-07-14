@@ -169,13 +169,23 @@ export async function generateTailoringPlan(
     let tailored = applyTailoring(resume, plan);
     let coverage = scoreCoverage(tailored, jobDescription);
 
-    if (coverage < COVERAGE_RETRY_THRESHOLD) {
+    if (coverage < COVERAGE_RETRY_THRESHOLD && toolUse?.type === "tool_use") {
       const gaps = missingKeywords(tailored, jobDescription);
+      // A forced tool_use response MUST be followed by a tool_result block
+      // referencing its id — the API rejects the request otherwise (400
+      // invalid_request_error). The feedback for the retry goes *in* that
+      // tool_result rather than as a separate plain-text message.
       messages.push(
         { role: "assistant", content: response.content },
         {
           role: "user",
-          content: `Coverage is weak (${coverage}/100). These job-description keywords aren't reflected yet: ${gaps.slice(0, 15).join(", ")}. If any existing bullet/skill legitimately covers one of these (via its keywords or an approved synonym), revise the plan to surface it. Still choose only from the same fixed inventory — never invent new text. Submit a revised plan.`,
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: toolUse.id,
+              content: `Coverage is weak (${coverage}/100). These job-description keywords aren't reflected yet: ${gaps.slice(0, 15).join(", ")}. If any existing bullet/skill legitimately covers one of these (via its keywords or an approved synonym), revise the plan to surface it. Still choose only from the same fixed inventory — never invent new text. Submit a revised plan.`,
+            },
+          ],
         }
       );
 
