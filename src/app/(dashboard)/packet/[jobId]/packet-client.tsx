@@ -22,13 +22,16 @@ function QuestionCard({
   question,
   onUpdate,
   onDelete,
+  onGenerate,
 }: {
   question: ApplicationQuestion;
   onUpdate: (id: string, patch: { answer?: string; status?: string }) => Promise<void>;
   onDelete: (id: string) => void;
+  onGenerate: (id: string) => Promise<ApplicationQuestion | null>;
 }) {
   const [answer, setAnswer] = useState(question.answer ?? "");
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const dirty = answer !== (question.answer ?? "");
 
   async function saveAnswer() {
@@ -40,6 +43,16 @@ function QuestionCard({
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      const updated = await onGenerate(question.id);
+      if (updated) setAnswer(updated.answer ?? "");
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -63,6 +76,9 @@ function QuestionCard({
         data-testid={`answer-${question.id}`}
       />
       <div className="mt-2 flex flex-wrap gap-3 text-xs">
+        <button onClick={handleGenerate} disabled={generating} className="hover:underline" data-testid={`generate-answer-${question.id}`}>
+          {generating ? "Generating..." : "Generate answer from story bank"}
+        </button>
         {dirty && (
           <button onClick={saveAnswer} disabled={saving} className="hover:underline" data-testid={`save-answer-${question.id}`}>
             {saving ? "Saving..." : "Save answer"}
@@ -158,6 +174,20 @@ export function PacketClient({
     }
   }
 
+  async function handleGenerate(id: string): Promise<ApplicationQuestion | null> {
+    try {
+      const res = await fetch(`/api/questions/${id}/generate-answer`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to generate answer");
+      setQuestions((qs) => qs.map((q) => (q.id === id ? body.question : q)));
+      toast.success("Answer drafted from story bank");
+      return body.question;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate answer");
+      return null;
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Delete this prompt?")) return;
     try {
@@ -235,7 +265,7 @@ export function PacketClient({
 
       <div className="space-y-3">
         {questions.map((q) => (
-          <QuestionCard key={q.id} question={q} onUpdate={handleUpdate} onDelete={handleDelete} />
+          <QuestionCard key={q.id} question={q} onUpdate={handleUpdate} onDelete={handleDelete} onGenerate={handleGenerate} />
         ))}
       </div>
 
