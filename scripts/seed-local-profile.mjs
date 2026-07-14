@@ -40,8 +40,9 @@ async function main() {
   await sql`
     insert into candidate_profile
       (name, email, phone, linkedin, location, current_company, function_tags,
-       preferred_industries, work_authorized, requires_sponsorship, education,
-       search_criteria)
+       preferred_industries, work_authorized, requires_sponsorship,
+       gender_identity, race_ethnicity, sexual_orientation, veteran_status,
+       education, search_criteria)
     values (
       ${profile.name}, ${profile.email}, ${profile.phone ?? null},
       ${profile.linkedin ?? null}, ${profile.location ?? null},
@@ -49,6 +50,8 @@ async function main() {
       ${sql.json(profile.functionTags ?? [])},
       ${sql.json(profile.preferredIndustries ?? [])},
       ${profile.workAuthorized}, ${profile.requiresSponsorship},
+      ${profile.genderIdentity || null}, ${profile.raceEthnicity || null},
+      ${profile.sexualOrientation || null}, ${profile.veteranStatus || null},
       ${sql.json(profile.education ?? [])},
       ${sql.json(profile.searchCriteria ?? null)}
     )

@@ -25,8 +25,12 @@ what's there.
 
 ## File shapes
 
-- **profile.seed.json** — your contact info, work-authorization defaults, and
-  job-search criteria (role families, locations, salary floor, industries).
+- **profile.seed.json** — your contact info, work-authorization defaults,
+  job-search criteria (role families, locations, salary floor, industries),
+  and optional EEO/demographic self-identification (`genderIdentity`,
+  `raceEthnicity`, `sexualOrientation`, `veteranStatus` — free text, leave
+  any blank to have the Apply Run Brief tell the automation to select
+  "decline to answer" for it instead).
 - **resume.seed.json** — your base resume as structured data, not a static
   file. Each bullet has a stable `id`, `keywords`, and a `synonyms` map (a
   small set of pre-approved phrasing swaps for that bullet only). The Resume

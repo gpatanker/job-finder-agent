@@ -117,6 +117,16 @@ export const candidateProfile = pgTable("candidate_profile", {
   requiresSponsorship: boolean("requires_sponsorship")
     .notNull()
     .default(false),
+  // Optional EEO/demographic self-identification — free text rather than
+  // fixed enums, since every application's dropdown options differ; the
+  // Computer Apply Run Brief passes these through for the automation to
+  // match against whatever a given form actually offers. Never scraped or
+  // inferred — set explicitly by the candidate in Settings, and left out of
+  // the brief entirely (falls back to "prefer not to answer") if blank.
+  genderIdentity: text("gender_identity"),
+  raceEthnicity: text("race_ethnicity"),
+  sexualOrientation: text("sexual_orientation"),
+  veteranStatus: text("veteran_status"),
   education: jsonb("education").$type<EducationEntry[]>().notNull().default([]),
   searchCriteria: jsonb("search_criteria").$type<SearchCriteria>(),
   createdAt: timestamp("created_at", { withTimezone: true })

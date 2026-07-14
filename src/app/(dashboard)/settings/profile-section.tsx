@@ -38,6 +38,12 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
   const [requiresSponsorship, setRequiresSponsorship] = useState(
     profile?.requiresSponsorship ?? false
   );
+  const [genderIdentity, setGenderIdentity] = useState(profile?.genderIdentity ?? "");
+  const [raceEthnicity, setRaceEthnicity] = useState(profile?.raceEthnicity ?? "");
+  const [sexualOrientation, setSexualOrientation] = useState(
+    profile?.sexualOrientation ?? ""
+  );
+  const [veteranStatus, setVeteranStatus] = useState(profile?.veteranStatus ?? "");
   const [education, setEducation] = useState<EducationEntry[]>(
     profile?.education?.length ? profile.education : [{ school: "", degree: "" }]
   );
@@ -79,6 +85,10 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
           preferredIndustries: fromCsv(preferredIndustries),
           workAuthorized,
           requiresSponsorship,
+          genderIdentity: genderIdentity || undefined,
+          raceEthnicity: raceEthnicity || undefined,
+          sexualOrientation: sexualOrientation || undefined,
+          veteranStatus: veteranStatus || undefined,
           education: education.filter((e) => e.school || e.degree),
           searchCriteria: {
             roleFamilies: fromCsv(roleFamilies),
@@ -155,6 +165,49 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
           />
           Requires visa sponsorship now/future
         </label>
+      </div>
+
+      <div className="rounded-lg border border-black/10 p-3 dark:border-white/15">
+        <p className="mb-1 text-sm font-medium">Optional self-identification</p>
+        <p className="mb-2 text-xs text-black/60 dark:text-white/60">
+          Used only to answer EEO/demographic questions during application review — never
+          scraped or guessed. Leave any field blank to have the Apply Run Brief tell the
+          automation to select &ldquo;decline to answer&rdquo; for it instead.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">Gender identity</label>
+            <input
+              className={inputClass}
+              value={genderIdentity}
+              onChange={(e) => setGenderIdentity(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">Race / ethnicity</label>
+            <input
+              className={inputClass}
+              value={raceEthnicity}
+              onChange={(e) => setRaceEthnicity(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">Sexual orientation</label>
+            <input
+              className={inputClass}
+              value={sexualOrientation}
+              onChange={(e) => setSexualOrientation(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">Veteran status</label>
+            <input
+              className={inputClass}
+              value={veteranStatus}
+              onChange={(e) => setVeteranStatus(e.target.value)}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2">

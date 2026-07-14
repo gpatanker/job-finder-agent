@@ -10,6 +10,22 @@ function formatEducation(profile: CandidateProfile): string {
   return profile.education.map((e) => `${e.degree}, ${e.school}`).join("; ");
 }
 
+function formatDemographics(profile: CandidateProfile): string {
+  const fields: [string, string | null][] = [
+    ["Gender identity", profile.genderIdentity],
+    ["Race / ethnicity", profile.raceEthnicity],
+    ["Sexual orientation", profile.sexualOrientation],
+    ["Veteran status", profile.veteranStatus],
+  ];
+  return fields
+    .map(([label, value]) =>
+      value
+        ? `- ${label}: ${value} (select the closest matching option; if none matches, select the closest option or "decline to answer")`
+        : `- ${label}: Not on file — select "decline to answer" / "prefer not to answer" if the field is required`
+    )
+    .join("\n");
+}
+
 export function buildApplyRunBrief(params: {
   job: Job;
   profile: CandidateProfile;
@@ -55,7 +71,9 @@ CANDIDATE BASICS
 - Education: ${formatEducation(profile)}
 - Work authorization: ${profile.workAuthorized ? "Yes, legally authorized to work in the United States" : "Not authorized — pause and ask the user"}
 - Sponsorship: ${profile.requiresSponsorship ? "Yes, will now or in the future require visa sponsorship" : "No sponsorship required"}
-- Optional demographics: leave blank if possible; if required, select decline / I do not wish to answer.
+
+OPTIONAL DEMOGRAPHIC / EEO QUESTIONS (only if the application asks — these are always optional under EEO law, never a reason to stop)
+${formatDemographics(profile)}
 
 APPROVED ANSWERS
 ${answersBlock}

@@ -45,6 +45,10 @@ const profile = {
   preferredIndustries: [],
   workAuthorized: true,
   requiresSponsorship: false,
+  genderIdentity: null,
+  raceEthnicity: null,
+  sexualOrientation: null,
+  veteranStatus: null,
   education: [{ school: "State University", degree: "B.S." }],
   searchCriteria: null,
   createdAt: new Date(),
@@ -120,5 +124,36 @@ describe("buildApplyRunBrief", () => {
       resumeRoute: null,
     });
     expect(brief).toContain("No approved prompts on file");
+  });
+
+  it("tells the automation to decline demographic questions when none are on file", () => {
+    const brief = buildApplyRunBrief({
+      job,
+      profile,
+      approvedQuestions: [],
+      submitAuthorized: false,
+      resumeRoute: null,
+    });
+    expect(brief).toContain('Gender identity: Not on file — select "decline to answer"');
+  });
+
+  it("passes through real self-identification values when set, for the automation to match against the form's own options", () => {
+    const brief = buildApplyRunBrief({
+      job,
+      profile: {
+        ...profile,
+        genderIdentity: "Male",
+        raceEthnicity: "Asian (South Asian); not Hispanic or Latino",
+        sexualOrientation: "Heterosexual / Straight",
+        veteranStatus: "Not a veteran",
+      },
+      approvedQuestions: [],
+      submitAuthorized: false,
+      resumeRoute: null,
+    });
+    expect(brief).toContain("Gender identity: Male");
+    expect(brief).toContain("Race / ethnicity: Asian (South Asian); not Hispanic or Latino");
+    expect(brief).toContain("Sexual orientation: Heterosexual / Straight");
+    expect(brief).toContain("Veteran status: Not a veteran");
   });
 });

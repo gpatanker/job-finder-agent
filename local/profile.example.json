@@ -9,6 +9,10 @@
   "preferredIndustries": ["Enterprise software", "Fintech"],
   "workAuthorized": true,
   "requiresSponsorship": false,
+  "genderIdentity": "",
+  "raceEthnicity": "",
+  "sexualOrientation": "",
+  "veteranStatus": "",
   "education": [
     { "school": "State University", "degree": "B.S. in Business Administration" }
   ],
