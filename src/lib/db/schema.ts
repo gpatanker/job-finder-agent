@@ -184,9 +184,36 @@ export const storyBankEntries = pgTable("story_bank_entries", {
     .defaultNow(),
 }).enableRLS();
 
+/**
+ * Suggestions from the Job Search Agent — deliberately NOT the `jobs` table.
+ * A web-search-backed LLM can surface stale postings or wrong details, so
+ * results land here for human review and require an explicit "Promote to
+ * pipeline" action before becoming a real tracked job.
+ */
+export const jobSearchSuggestions = pgTable("job_search_suggestions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  company: text("company").notNull(),
+  title: text("title").notNull(),
+  location: text("location"),
+  workMode: text("work_mode"),
+  applyUrl: text("apply_url"),
+  sourceUrl: text("source_url"),
+  salaryText: text("salary_text"),
+  matchScore: integer("match_score"),
+  rationale: text("rationale"),
+  status: text("status").notNull().default("new"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}).enableRLS();
+
 export type Job = typeof jobs.$inferSelect;
 export type ApplicationQuestion = typeof applicationQuestions.$inferSelect;
 export type AgentRunQueueItem = typeof agentRunQueue.$inferSelect;
 export type CandidateProfile = typeof candidateProfile.$inferSelect;
 export type ResumeProfile = typeof resumeProfile.$inferSelect;
 export type StoryBankEntry = typeof storyBankEntries.$inferSelect;
+export type JobSearchSuggestion = typeof jobSearchSuggestions.$inferSelect;

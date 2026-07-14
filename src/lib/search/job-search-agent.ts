@@ -1,0 +1,158 @@
+import Anthropic from "@anthropic-ai/sdk";
+import type { CandidateProfile } from "@/lib/db/schema";
+
+const MODEL = "claude-sonnet-5";
+const TOOL_NAME = "submit_job_candidates";
+
+export type JobCandidate = {
+  company: string;
+  title: string;
+  location?: string;
+  workMode?: string;
+  applyUrl: string;
+  sourceUrl: string;
+  salaryText?: string;
+  matchScore: number;
+  rationale: string;
+};
+
+const submitTool = {
+  name: TOOL_NAME,
+  description:
+    "Submit the list of currently-open job posting candidates found via web search.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      candidates: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            company: { type: "string" },
+            title: { type: "string" },
+            location: { type: "string" },
+            workMode: { type: "string", enum: ["remote", "hybrid", "onsite"] },
+            applyUrl: {
+              type: "string",
+              description: "Direct link to the job posting/application page, from actual search results — never guessed.",
+            },
+            sourceUrl: {
+              type: "string",
+              description: "The URL where this posting was actually found.",
+            },
+            salaryText: { type: "string" },
+            matchScore: {
+              type: "integer",
+              description: "0-100 fit score against the candidate's background and search criteria.",
+            },
+            rationale: {
+              type: "string",
+              description: "1-2 sentence explanation of the fit, grounded in the candidate's real background.",
+            },
+          },
+          required: ["company", "title", "applyUrl", "sourceUrl", "matchScore", "rationale"],
+        },
+      },
+    },
+    required: ["candidates"],
+  },
+};
+
+/**
+ * Job Search Agent: the one genuinely agentic (tool-calling) piece in this
+ * app. Claude searches the web (a native server-side tool — Anthropic's API
+ * executes the search itself) for currently-open postings matching the
+ * candidate's criteria, then must call submit_job_candidates with only what
+ * it actually found. Results are NOT written to the jobs table directly —
+ * the caller stores them as suggestions requiring human "Promote" action,
+ * since a web-search-backed model can surface stale or wrong postings.
+ */
+export async function findJobCandidates(params: {
+  profile: CandidateProfile;
+  knownJobs: { company: string; title: string }[];
+}): Promise<{ candidates: JobCandidate[]; warning?: string }> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return {
+      candidates: [],
+      warning: "ANTHROPIC_API_KEY is not set — job search requires it.",
+    };
+  }
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const criteria = params.profile.searchCriteria;
+  const knownList = params.knownJobs
+    .slice(0, 100)
+    .map((j) => `${j.company} — ${j.title}`)
+    .join("\n");
+
+  const systemPrompt = `You are a job-search assistant helping a real candidate find currently-open roles. You have a native web_search tool — use it to find actual, currently-open job postings, not ones you recall from training data.
+
+Rules:
+- Only include postings you actually found via web_search in this conversation, with a real applyUrl/sourceUrl from the search results. Never fabricate a posting or guess a URL.
+- Prioritize the candidate's stated role families, locations, salary floor, and preferred industries.
+- Skip anything already in the candidate's known-jobs list below (avoid near-duplicates by company+title).
+- Do not tailor everything to any single company — search broadly across the stated preferred industries.
+- Aim for 5-8 solid candidates. Fewer good matches is better than padding with irrelevant ones.
+- When you are done searching, you MUST call ${TOOL_NAME} with your findings — do not just respond with text.`;
+
+  const userMessage = `CANDIDATE BACKGROUND
+- Current company: ${params.profile.currentCompany ?? "n/a"}
+- Function: ${params.profile.functionTags.join(", ")}
+- Preferred industries: ${params.profile.preferredIndustries.join(", ")}
+
+SEARCH CRITERIA
+- Role families: ${criteria?.roleFamilies?.join(", ") ?? "n/a"}
+- Locations: ${criteria?.locations?.join(", ") ?? "n/a"}
+- Salary floor: ${criteria?.salaryFloor ? `$${criteria.salaryFloor.toLocaleString()}` : "n/a"}
+- Industries: ${criteria?.industries?.join(", ") ?? "n/a"}
+
+ALREADY-KNOWN JOBS (skip near-duplicates of these)
+${knownList || "(none yet)"}
+
+Search the web for currently-open postings matching this profile, then submit your findings.`;
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 8000,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userMessage }],
+    tools: [
+      { type: "web_search_20250305", name: "web_search", max_uses: 8 },
+      submitTool,
+    ],
+  });
+
+  const toolUse = response.content.find(
+    (c) => c.type === "tool_use" && c.name === TOOL_NAME
+  );
+
+  if (!toolUse || toolUse.type !== "tool_use") {
+    return {
+      candidates: [],
+      warning: "The search agent didn't return structured results this time — try again.",
+    };
+  }
+
+  const input = toolUse.input as { candidates?: unknown };
+  if (!Array.isArray(input.candidates)) {
+    return { candidates: [], warning: "Search agent returned no candidates." };
+  }
+
+  const candidates: JobCandidate[] = input.candidates
+    .filter(
+      (c): c is JobCandidate =>
+        typeof c === "object" &&
+        c !== null &&
+        typeof (c as JobCandidate).company === "string" &&
+        typeof (c as JobCandidate).title === "string" &&
+        typeof (c as JobCandidate).applyUrl === "string" &&
+        typeof (c as JobCandidate).sourceUrl === "string"
+    )
+    .map((c) => ({
+      ...c,
+      matchScore: Math.max(0, Math.min(100, Math.round(Number(c.matchScore) || 0))),
+    }));
+
+  return { candidates };
+}

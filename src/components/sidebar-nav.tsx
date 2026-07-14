@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { href: "/packet", label: "Application Packet", enabled: true },
   { href: "/apply-agent", label: "Apply Agent", enabled: true },
   { href: "/run-queue", label: "Run Queue", enabled: true },
-  { href: "/search", label: "Search / Import", enabled: false },
+  { href: "/search", label: "Search / Import", enabled: true },
   { href: "/settings", label: "Settings", enabled: true },
 ];
 
