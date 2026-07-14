@@ -100,7 +100,9 @@ export async function renderResumePdf(
     doc.x = PAGE_MARGIN_X;
     doc.y = startY + lineHeight + 2;
   }
-  doc.moveDown(0.5);
+  doc.moveDown(0.4);
+  divider(doc, rightEdge);
+  doc.moveDown(0.15);
 
   // --- Professional Experience ---
   sectionHeader(doc, "PROFESSIONAL EXPERIENCE", contentWidth);
