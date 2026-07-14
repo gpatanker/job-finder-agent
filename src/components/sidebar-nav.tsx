@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/", label: "Overview", enabled: true },
   { href: "/pipeline", label: "Pipeline", enabled: true },
-  { href: "/tailor", label: "Resume Tailor", enabled: false },
+  { href: "/tailor", label: "Resume Tailor", enabled: true },
   { href: "/packet", label: "Application Packet", enabled: false },
   { href: "/apply-agent", label: "Apply Agent", enabled: false },
   { href: "/run-queue", label: "Run Queue", enabled: false },

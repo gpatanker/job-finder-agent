@@ -337,6 +337,13 @@ export function PipelineClient({ initialJobs }: { initialJobs: Job[] }) {
                           Apply link
                         </a>
                       ) : null}
+                      <a
+                        href={`/tailor/${job.id}`}
+                        className="text-xs hover:underline"
+                        data-testid={`tailor-${job.id}`}
+                      >
+                        {job.tailoredResumeSlug ? "Resume ✓" : "Tailor resume"}
+                      </a>
                       <button
                         onClick={() => setEditingJob(job)}
                         className="text-xs hover:underline"

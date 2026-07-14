@@ -7,6 +7,7 @@ import {
   timestamp,
   jsonb,
 } from "drizzle-orm/pg-core";
+import type { TailoringPlan } from "@/lib/resume/types";
 
 export const jobs = pgTable("jobs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -33,6 +34,8 @@ export const jobs = pgTable("jobs", {
   tailoredResumeGeneratedAt: timestamp("tailored_resume_generated_at", {
     withTimezone: true,
   }),
+  tailoringPlan: jsonb("tailoring_plan").$type<TailoringPlan>(),
+  resumeCoverageScore: integer("resume_coverage_score"),
   applicationPromptsScannedAt: timestamp("application_prompts_scanned_at", {
     withTimezone: true,
   }),

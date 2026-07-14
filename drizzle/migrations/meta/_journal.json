@@ -15,6 +15,13 @@
       "when": 1783989362693,
       "tag": "0001_settings_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783991211743,
+      "tag": "0002_resume_tailoring_fields",
+      "breakpoints": true
     }
   ]
 }
