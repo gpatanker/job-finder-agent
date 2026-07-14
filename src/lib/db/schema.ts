@@ -85,3 +85,7 @@ export const agentRunQueue = pgTable("agent_run_queue", {
   resultSummary: text("result_summary"),
   error: text("error"),
 }).enableRLS();
+
+export type Job = typeof jobs.$inferSelect;
+export type ApplicationQuestion = typeof applicationQuestions.$inferSelect;
+export type AgentRunQueueItem = typeof agentRunQueue.$inferSelect;
