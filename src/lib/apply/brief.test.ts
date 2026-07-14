@@ -57,6 +57,7 @@ const profile = {
   disabilityStatus: null,
   zipCode: null,
   highestEducationLevel: null,
+  totalYearsExperience: null,
   requiresRelocationAssistance: false,
   howHeardDefault: null,
   aiPolicyAgreement: null,
@@ -186,7 +187,7 @@ describe("buildApplyRunBrief", () => {
     expect(brief).toContain("Disability status: Yes, I have a disability");
   });
 
-  it("never auto-answers an experience-years threshold question — always instructs a pause instead", () => {
+  it("pauses on an experience-years threshold question when no self-reported total is on file", () => {
     const brief = buildApplyRunBrief({
       job,
       profile,
@@ -198,6 +199,25 @@ describe("buildApplyRunBrief", () => {
     expect(brief).toContain("do NOT answer automatically");
     expect(brief).toContain("Pause, show the user the threshold asked and this computed total");
   });
+
+  it(
+    "regression: uses the candidate's self-reported total experience to answer threshold questions directly " +
+      "once it's on file, instead of pausing (the resume intentionally lists only relevant roles and can " +
+      "understate real total experience — e.g. resume shows ~2 years here but the candidate reported 8+)",
+    () => {
+      const brief = buildApplyRunBrief({
+        job,
+        profile: { ...profile, totalYearsExperience: 8 },
+        experience,
+        approvedQuestions: [],
+        submitAuthorized: false,
+        resumeRoute: null,
+      });
+      expect(brief).toContain("Total years of experience: 8+ years, self-reported by the candidate directly");
+      expect(brief).toContain("compare N to this self-reported total and answer directly");
+      expect(brief).not.toContain("do NOT answer automatically");
+    }
+  );
 
   it("detects that the candidate has previously worked at the company being applied to", () => {
     const brief = buildApplyRunBrief({

@@ -43,6 +43,13 @@
       "when": 1784014276023,
       "tag": "0005_mature_the_anarchist",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784015087536,
+      "tag": "0006_cuddly_red_hulk",
+      "breakpoints": true
     }
   ]
 }

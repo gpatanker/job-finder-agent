@@ -32,12 +32,32 @@ function residesInUnitedStates(profile: CandidateProfile): boolean {
   return /united states|\bUSA\b|\bU\.S\.?A?\.?\b/i.test(profile.location ?? "");
 }
 
+function formatExperienceLine(profile: CandidateProfile, experience: ResumeExperienceEntry[]): string {
+  const resumeDerived = formatExperienceSummary(experience);
+
+  if (profile.totalYearsExperience != null) {
+    return (
+      `- Total years of experience: ${profile.totalYearsExperience}+ years, self-reported by the candidate directly ` +
+      `(the resume only reflects ~${resumeDerived} because it's tailored to relevant roles, not a full work history). ` +
+      `For any "do you have at least N years of experience" question, compare N to this self-reported total and answer ` +
+      `directly — Yes if N is at or below it, No if clearly above it. Only pause if the question's wording doesn't map ` +
+      `cleanly onto this number (e.g. asks about a specific narrow domain the candidate may not have this much of).`
+    );
+  }
+
+  return (
+    `- Total professional experience (computed from resume dates only): ${resumeDerived}. No self-reported total is on ` +
+    `file, and the resume may not reflect the candidate's full work history — for any "do you have at least N years of ` +
+    `experience" question, do NOT answer automatically. Pause, show the user the threshold asked and this computed total, ` +
+    `and ask how to answer.`
+  );
+}
+
 function formatStructuredAnswers(
   profile: CandidateProfile,
   experience: ResumeExperienceEntry[],
   companyName: string
 ): string {
-  const experienceSummary = formatExperienceSummary(experience);
   const knownCompanies = experience.map((e) => e.company);
   const previouslyWorkedHere = knownCompanies.some(
     (c) => c.trim().toLowerCase() === companyName.trim().toLowerCase()
@@ -48,7 +68,7 @@ function formatStructuredAnswers(
     `- Requires relocation assistance: ${profile.requiresRelocationAssistance ? "Yes" : "No"}`,
     `- Highest level of education: ${profile.highestEducationLevel ?? "Not on file — pause and ask the user, or infer conservatively from the education list above"}`,
     `- Zip code of primary residence: ${profile.zipCode ?? "Not on file — pause and ask the user"}`,
-    `- Total professional experience (computed from resume dates): ${experienceSummary} — for any "do you have at least N years of experience" question, do NOT answer automatically: this is a judgment call that can affect eligibility. Pause, show the user the threshold asked and this computed total, and ask how to answer.`,
+    formatExperienceLine(profile, experience),
     `- Previously worked at ${companyName}: ${previouslyWorkedHere ? "Yes" : "No"} (based on the work-history company list: ${knownCompanies.join(", ") || "none on file"})`,
     `- "How did you hear about this opportunity?" default: ${profile.howHeardDefault ?? "Not on file — pause and ask the user"}`,
     `- AI-tool-use policy agreement (if the application asks you to agree not to use AI during interviews): ${profile.aiPolicyAgreement ?? "Not on file — pause and ask the user"}`,

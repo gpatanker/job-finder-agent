@@ -51,6 +51,9 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
   const [highestEducationLevel, setHighestEducationLevel] = useState(
     profile?.highestEducationLevel ?? ""
   );
+  const [totalYearsExperience, setTotalYearsExperience] = useState(
+    profile?.totalYearsExperience?.toString() ?? ""
+  );
   const [requiresRelocationAssistance, setRequiresRelocationAssistance] = useState(
     profile?.requiresRelocationAssistance ?? false
   );
@@ -106,6 +109,7 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
           disabilityStatus: disabilityStatus || undefined,
           zipCode: zipCode || undefined,
           highestEducationLevel: highestEducationLevel || undefined,
+          totalYearsExperience: totalYearsExperience ? Number(totalYearsExperience) : undefined,
           requiresRelocationAssistance,
           howHeardDefault: howHeardDefault || undefined,
           aiPolicyAgreement: aiPolicyAgreement || undefined,
@@ -278,6 +282,18 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
               placeholder="e.g. Yes, I agree"
               value={aiPolicyAgreement}
               onChange={(e) => setAiPolicyAgreement(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-black/60 dark:text-white/60">
+              Total years of experience (self-reported)
+            </label>
+            <input
+              type="number"
+              className={inputClass}
+              placeholder="e.g. 8 — your full work history, not just what's on the tailored resume"
+              value={totalYearsExperience}
+              onChange={(e) => setTotalYearsExperience(e.target.value)}
             />
           </div>
         </div>

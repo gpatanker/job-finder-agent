@@ -42,7 +42,7 @@ async function main() {
       (name, email, phone, linkedin, location, current_company, function_tags,
        preferred_industries, work_authorized, requires_sponsorship,
        gender_identity, race_ethnicity, sexual_orientation, veteran_status,
-       disability_status, zip_code, highest_education_level,
+       disability_status, zip_code, highest_education_level, total_years_experience,
        requires_relocation_assistance, how_heard_default, ai_policy_agreement,
        education, search_criteria)
     values (
@@ -55,7 +55,7 @@ async function main() {
       ${profile.genderIdentity || null}, ${profile.raceEthnicity || null},
       ${profile.sexualOrientation || null}, ${profile.veteranStatus || null},
       ${profile.disabilityStatus || null}, ${profile.zipCode || null},
-      ${profile.highestEducationLevel || null},
+      ${profile.highestEducationLevel || null}, ${profile.totalYearsExperience ?? null},
       ${profile.requiresRelocationAssistance ?? false},
       ${profile.howHeardDefault || null}, ${profile.aiPolicyAgreement || null},
       ${sql.json(profile.education ?? [])},

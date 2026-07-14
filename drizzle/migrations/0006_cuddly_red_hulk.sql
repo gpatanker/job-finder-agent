@@ -1,0 +1,1 @@
+ALTER TABLE "candidate_profile" ADD COLUMN "total_years_experience" integer;

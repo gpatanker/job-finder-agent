@@ -134,6 +134,13 @@ export const candidateProfile = pgTable("candidate_profile", {
   // instead of the Computer having to pause and ask on every application.
   zipCode: text("zip_code"),
   highestEducationLevel: text("highest_education_level"),
+  // Self-reported, in years (e.g. 8) — distinct from the resume-computed
+  // total in experience.ts, since the resume intentionally lists only the
+  // roles/bullets relevant to the tailoring inventory and may understate
+  // actual total work history. When set, this is the authoritative answer
+  // for "do you have at least N years of experience" questions, not the
+  // resume-derived figure.
+  totalYearsExperience: integer("total_years_experience"),
   requiresRelocationAssistance: boolean("requires_relocation_assistance")
     .notNull()
     .default(false),
