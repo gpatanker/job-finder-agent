@@ -38,18 +38,40 @@ export type ScoreJobUrlResult =
   | { ok: true; result: JobScoreResult }
   | { ok: false; error: string };
 
+function labeledFields(fields: Record<string, string | undefined | null>): string {
+  return Object.entries(fields)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join("\n");
+}
+
+/** Ashby's page title reliably follows "{Job Title} @ {Company}" — confirmed live (e.g. "Business Operations @ Physical Intelligence") — and is present in the raw HTML even though the rest of the page is client-rendered. */
+function companyFromTitleTag(html: string): string | undefined {
+  const title = cheerio.load(html)("title").text().trim();
+  const parts = title.split(/\s+@\s+/);
+  return parts.length > 1 ? parts[parts.length - 1].trim() : undefined;
+}
+
 /**
- * Fetches a single job posting's readable content. Greenhouse's public Job
- * Board API (used elsewhere for scraping — see scraping/greenhouse.ts) is
- * tried first since it reliably returns the description as clean JSON even
- * for the newer job-boards.greenhouse.io template that renders its
- * application form client-side; everything else falls back to a plain
- * fetch + stripped-down visible body text, which is sufficient for most
- * job-description pages (unlike application *forms*, descriptions are
- * typically server-rendered for SEO).
+ * Fetches a single job posting's readable content, preferring a platform's
+ * public Job Board API when one exists — far more reliable than scraping,
+ * since these return clean structured fields (location, work mode) as JSON
+ * rather than requiring extraction from prose or, worse, a client-rendered
+ * page a plain fetch can't see at all:
+ *   - Greenhouse: boards-api.greenhouse.io (also used in scraping/greenhouse.ts)
+ *   - Ashby: api.ashbyhq.com/posting-api — confirmed real case: a Physical
+ *     Intelligence posting's Location ("San Francisco") was clearly visible
+ *     on the page but missing from a plain-fetch/meta-description
+ *     extraction, because Ashby renders those structured fields from
+ *     client-side JSON, not page text. This API returns them directly.
+ * Everything else falls back to a plain fetch + stripped-down visible body
+ * text (with a meta-description fallback for SPA shells with an empty
+ * <body>), which is sufficient for most job-description pages.
  */
 async function extractPageText(url: string): Promise<string | null> {
-  if (detectPlatform(url) === "greenhouse") {
+  const platform = detectPlatform(url);
+
+  if (platform === "greenhouse") {
     try {
       const { pathname } = new URL(url);
       const match = pathname.match(/^\/([^/]+)\/jobs\/(\d+)/);
@@ -66,11 +88,62 @@ async function extractPageText(url: string): Promise<string | null> {
             location?: { name?: string };
             content?: string;
           };
-          const descriptionText = cheerio.load(data.content ?? "")("body").text();
-          return [data.title, data.company_name, data.location?.name, descriptionText]
-            .filter(Boolean)
-            .join("\n\n")
-            .trim();
+          const descriptionText = cheerio.load(data.content ?? "")("body").text().trim();
+          const fields = labeledFields({
+            Title: data.title,
+            Company: data.company_name,
+            Location: data.location?.name,
+          });
+          return [fields, descriptionText].filter(Boolean).join("\n\n").trim() || null;
+        }
+      }
+    } catch {
+      // fall through to the generic path below
+    }
+  }
+
+  if (platform === "ashby") {
+    try {
+      const { pathname } = new URL(url);
+      const match = pathname.match(/^\/([^/]+)\/([^/]+)/);
+      if (match) {
+        const [, orgSlug, jobId] = match;
+        const res = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${orgSlug}`, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; JobFinderAgent/1.0)" },
+        });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            jobs?: {
+              id: string;
+              title?: string;
+              location?: string;
+              employmentType?: string;
+              workplaceType?: string;
+              department?: string;
+              descriptionPlain?: string;
+            }[];
+          };
+          const job = data.jobs?.find((j) => j.id === jobId);
+          if (job) {
+            // The posting-api doesn't include the company/org display name —
+            // pull it from the page's <title> tag, which is present even
+            // though the rest of the page is client-rendered.
+            let company: string | undefined;
+            try {
+              company = companyFromTitleTag(await fetchHtml(url));
+            } catch {
+              // proceed without it — Claude can still often infer it from the description
+            }
+            const fields = labeledFields({
+              Title: job.title,
+              Company: company,
+              Location: job.location,
+              "Employment type": job.employmentType,
+              "Workplace type": job.workplaceType,
+              Department: job.department,
+            });
+            return [fields, job.descriptionPlain?.trim()].filter(Boolean).join("\n\n").trim() || null;
+          }
         }
       }
     } catch {
@@ -82,12 +155,11 @@ async function extractPageText(url: string): Promise<string | null> {
     const html = await fetchHtml(url);
     const $ = cheerio.load(html);
 
-    // Some client-rendered SPAs (confirmed real case: Ashby) ship an empty
-    // <body> in the raw HTML — the real content only exists after JS
-    // hydrates the page — but still populate the full job description into
-    // a meta description tag for SEO/social-sharing. Prefer whichever
-    // source actually has real content rather than assuming body text is
-    // where a page's content lives.
+    // Some client-rendered SPAs ship an empty <body> in the raw HTML — the
+    // real content only exists after JS hydrates the page — but still
+    // populate the full job description into a meta description tag for
+    // SEO/social-sharing. Prefer whichever source actually has real
+    // content rather than assuming body text is where a page's content lives.
     const title = $("title").text().trim();
     const metaDescription =
       $('meta[name="description"]').attr("content")?.trim() ||

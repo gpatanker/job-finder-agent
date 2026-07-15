@@ -193,6 +193,78 @@ describe("scoreJobUrl", () => {
   );
 
   it(
+    "regression: uses Ashby's public Job Board API for structured fields (location, work mode) " +
+      "instead of scraping — real case: a Physical Intelligence posting clearly showed " +
+      "'Location: San Francisco' on the page, but scraping/meta-description extraction missed it " +
+      "entirely because Ashby renders those fields from client-side JSON, not page text or meta tags",
+    async () => {
+      process.env.ANTHROPIC_API_KEY = "test-key";
+      const fetchMock = vi.fn(async (input: string | URL) => {
+        const url = input.toString();
+        if (url.includes("api.ashbyhq.com/posting-api")) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [
+                {
+                  id: "job-abc",
+                  title: "Business Operations",
+                  location: "San Francisco",
+                  employmentType: "FullTime",
+                  workplaceType: "OnSite",
+                  department: "Business",
+                  descriptionPlain: "Physical Intelligence is bringing general-purpose AI into the physical world.",
+                },
+              ],
+            }),
+          };
+        }
+        // the job page itself, fetched only for its <title> tag (company name)
+        return {
+          ok: true,
+          status: 200,
+          text: async () => "<html><head><title>Business Operations @ Physical Intelligence</title></head></html>",
+        };
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const create = vi.fn().mockResolvedValue(
+        toolResponse({
+          company: "Physical Intelligence",
+          title: "Business Operations",
+          location: "San Francisco",
+          workMode: "onsite",
+          matchScore: 72,
+          rationale: "Strong overlap with infrastructure operations experience.",
+        })
+      );
+      vi.doMock("@anthropic-ai/sdk", () => ({
+        default: class {
+          messages = { create };
+        },
+      }));
+
+      const { scoreJobUrl } = await import("./score-job-url");
+      const result = await scoreJobUrl({
+        url: "https://jobs.ashbyhq.com/physicalintelligence/job-abc",
+        profile,
+        resume,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.result.company).toBe("Physical Intelligence");
+        expect(result.result.location).toBe("San Francisco");
+      }
+
+      // Confirm the page text actually handed to Claude contains the
+      // structured location field, not just the narrative description.
+      const userMessage = create.mock.calls[0][0].messages[0].content as string;
+      expect(userMessage).toContain("Location: San Francisco");
+    }
+  );
+
+  it(
     "regression: extracts from the meta description tag when the page body is empty " +
       "(real case: Ashby ships a client-rendered SPA shell with an empty <body> in the raw " +
       "HTML, but puts the full job description in <meta name=\"description\"> for SEO)",
