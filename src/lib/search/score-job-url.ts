@@ -21,6 +21,19 @@ export type JobScoreResult = {
   rationale: string;
 };
 
+// Claude occasionally fills an optional tool-input field with a literal
+// placeholder ("<UNKNOWN>", "N/A", "unknown") instead of actually omitting
+// it — treat those the same as genuinely absent, rather than displaying
+// them as if they were real extracted values.
+const PLACEHOLDER_VALUES = new Set(["", "unknown", "n/a", "na", "<unknown>", "none", "null"]);
+
+function cleanOptionalField(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (PLACEHOLDER_VALUES.has(trimmed.toLowerCase())) return null;
+  return trimmed;
+}
+
 export type ScoreJobUrlResult =
   | { ok: true; result: JobScoreResult }
   | { ok: false; error: string };
@@ -68,9 +81,24 @@ async function extractPageText(url: string): Promise<string | null> {
   try {
     const html = await fetchHtml(url);
     const $ = cheerio.load(html);
+
+    // Some client-rendered SPAs (confirmed real case: Ashby) ship an empty
+    // <body> in the raw HTML — the real content only exists after JS
+    // hydrates the page — but still populate the full job description into
+    // a meta description tag for SEO/social-sharing. Prefer whichever
+    // source actually has real content rather than assuming body text is
+    // where a page's content lives.
+    const title = $("title").text().trim();
+    const metaDescription =
+      $('meta[name="description"]').attr("content")?.trim() ||
+      $('meta[property="og:description"]').attr("content")?.trim() ||
+      "";
+
     $("script, style, nav, footer, header, noscript, svg").remove();
-    const text = $("body").text().replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
-    return text.slice(0, MAX_PAGE_TEXT);
+    const bodyText = $("body").text().replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+
+    const combined = [title, metaDescription, bodyText].filter(Boolean).join("\n\n");
+    return combined ? combined.slice(0, MAX_PAGE_TEXT) : null;
   } catch {
     return null;
   }
@@ -150,6 +178,7 @@ export async function scoreJobUrl(params: {
 - Extract company, title, location, work mode, and salary ONLY if actually present in the given page text — never guess or fabricate a detail that isn't there (use null/omit if genuinely absent).
 - Score matchScore (0-100) based on genuine overlap between the posting's requirements and the candidate's actual resume experience/skills and stated search criteria — not superficial keyword matching.
 - rationale must cite specific, real overlaps (or gaps) — reference actual resume experience, not generic language.
+- Refer to the candidate as "the candidate" or "they/their" — you have no gender information, so never guess a gendered pronoun.
 - Respond only via the ${TOOL_NAME} tool.`;
 
     const userMessage = `CANDIDATE RESUME EXPERIENCE
@@ -206,9 +235,9 @@ Extract the job details and score the fit.`;
       result: {
         company: input.company,
         title: input.title,
-        location: input.location ?? null,
-        workMode: input.workMode ?? null,
-        salaryText: input.salaryText ?? null,
+        location: cleanOptionalField(input.location),
+        workMode: cleanOptionalField(input.workMode),
+        salaryText: cleanOptionalField(input.salaryText),
         matchScore: Math.max(0, Math.min(100, Math.round(Number(input.matchScore) || 0))),
         rationale: input.rationale,
       },

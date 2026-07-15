@@ -147,6 +147,97 @@ describe("scoreJobUrl", () => {
     }
   );
 
+  it(
+    'regression: treats a literal "<UNKNOWN>" placeholder (something Claude occasionally fills ' +
+      "in for an optional field instead of actually omitting it) the same as genuinely absent",
+    async () => {
+      process.env.ANTHROPIC_API_KEY = "test-key";
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: async () =>
+            "<html><body><h1>Senior Business Operations Analyst</h1><p>Acme Corp is hiring.</p></body></html>",
+        })
+      );
+      const create = vi.fn().mockResolvedValue(
+        toolResponse({
+          company: "Acme Corp",
+          title: "Senior Business Operations Analyst",
+          location: "<UNKNOWN>",
+          workMode: "N/A",
+          matchScore: 60,
+          rationale: "Some rationale.",
+        })
+      );
+      vi.doMock("@anthropic-ai/sdk", () => ({
+        default: class {
+          messages = { create };
+        },
+      }));
+
+      const { scoreJobUrl } = await import("./score-job-url");
+      const result = await scoreJobUrl({
+        url: "https://acme.com/careers/senior-analyst-4821",
+        profile,
+        resume,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.result.location).toBeNull();
+        expect(result.result.workMode).toBeNull();
+      }
+    }
+  );
+
+  it(
+    "regression: extracts from the meta description tag when the page body is empty " +
+      "(real case: Ashby ships a client-rendered SPA shell with an empty <body> in the raw " +
+      "HTML, but puts the full job description in <meta name=\"description\"> for SEO)",
+    async () => {
+      process.env.ANTHROPIC_API_KEY = "test-key";
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: async () =>
+            `<html><head><title>Analyst, Revenue Strategy &amp; Operations @ Baseten</title>` +
+            `<meta name="description" content="Baseten is hiring an Analyst, Revenue Strategy and Operations."></head>` +
+            `<body><div id="root"></div></body></html>`,
+        })
+      );
+
+      const create = vi.fn().mockResolvedValue(
+        toolResponse({
+          company: "Baseten",
+          title: "Analyst, Revenue Strategy & Operations",
+          matchScore: 70,
+          rationale: "Good overlap with revenue operations experience.",
+        })
+      );
+      vi.doMock("@anthropic-ai/sdk", () => ({
+        default: class {
+          messages = { create };
+        },
+      }));
+
+      const { scoreJobUrl } = await import("./score-job-url");
+      const result = await scoreJobUrl({
+        url: "https://jobs.ashbyhq.com/baseten/6d32aa11-ac93-4f90-8f62-bdeb79214ee5",
+        profile,
+        resume,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.result.company).toBe("Baseten");
+      }
+    }
+  );
+
   it("rejects the result if the extracted title doesn't actually appear on the fetched page (guards against a hallucinated/mismatched extraction)", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     vi.stubGlobal(
