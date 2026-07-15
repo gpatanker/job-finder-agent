@@ -14,6 +14,11 @@ describe("isBlockedSource", () => {
     expect(isBlockedSource("https://theladders.com/job/whatever_123")).toBe(true);
   });
 
+  it("blocks ZipRecruiter (excluded per user direction — paywall/quality issues)", () => {
+    expect(isBlockedSource("https://www.ziprecruiter.com/jobs/some-role")).toBe(true);
+    expect(isBlockedSource("https://ziprecruiter.com/jobs/some-role")).toBe(true);
+  });
+
   it("does not block a legitimate free-to-apply source", () => {
     expect(
       isBlockedSource("https://job-boards.greenhouse.io/anthropic/jobs/5138044008")
