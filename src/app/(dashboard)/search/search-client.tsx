@@ -13,6 +13,7 @@ export function SearchClient({
   const [running, setRunning] = useState(false);
   const [urlInput, setUrlInput] = useState("");
   const [scoring, setScoring] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
 
   async function handleScoreUrl(e: FormEvent) {
     e.preventDefault();
@@ -66,6 +67,30 @@ export function SearchClient({
     }
   }
 
+  async function handleClean() {
+    setCleaning(true);
+    try {
+      const res = await fetch("/api/search/clean", { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Cleanup failed");
+      setSuggestions(body.suggestions);
+      const notes = [
+        body.recovered > 0 ? `${body.recovered} recovered via direct company source` : null,
+        body.reasons?.closed > 0 ? `${body.reasons.closed} closed` : null,
+        body.reasons?.generic > 0 ? `${body.reasons.generic} not a specific posting` : null,
+        body.reasons?.blocked > 0 ? `${body.reasons.blocked} paywalled/blocked source` : null,
+        body.reasons?.unverifiable > 0 ? `${body.reasons.unverifiable} couldn't verify` : null,
+      ].filter(Boolean);
+      toast.success(
+        `Checked ${body.checked}, removed ${body.removed}${notes.length ? ` (${notes.join(", ")})` : ""}`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cleanup failed");
+    } finally {
+      setCleaning(false);
+    }
+  }
+
   async function handlePromote(id: string) {
     try {
       const res = await fetch(`/api/search/suggestions/${id}/promote`, { method: "POST" });
@@ -95,14 +120,25 @@ export function SearchClient({
 
   return (
     <div className="space-y-4">
-      <button
-        onClick={handleRun}
-        disabled={running}
-        className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-        data-testid="run-search-button"
-      >
-        {running ? "Searching..." : "Find matching roles"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={handleRun}
+          disabled={running}
+          className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+          data-testid="run-search-button"
+        >
+          {running ? "Searching..." : "Find matching roles"}
+        </button>
+        <button
+          onClick={handleClean}
+          disabled={cleaning || suggestions.length === 0}
+          className="rounded-md bg-black/5 px-3 py-2 text-sm font-medium disabled:opacity-50 dark:bg-white/10"
+          data-testid="clean-suggestions-button"
+          title="Re-check every suggestion for closed/stale/blocked links and remove anything that no longer holds up"
+        >
+          {cleaning ? "Cleaning..." : "Clean up suggestions"}
+        </button>
+      </div>
 
       <form
         onSubmit={handleScoreUrl}

@@ -3,31 +3,11 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { candidateProfile, jobSearchSuggestions, jobs } from "@/lib/db/schema";
 import { findJobCandidates, type JobCandidate } from "@/lib/search/job-search-agent";
-import { isLikelyBotBlocked, isLikelyClosed } from "@/lib/search/freshness-check";
-import { looksLikeGenericCareersPage } from "@/lib/search/specificity-check";
-import { isBlockedSource } from "@/lib/search/blocked-sources";
+import { checkCandidateUrl } from "@/lib/search/validate-candidate";
 import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
 
 function normalize(company: string, title: string): string {
   return `${company}|${title}`.toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-type CheckResult =
-  | { ok: true }
-  | { ok: false; reason: "blocked" | "generic" | "closed" | "unverifiable" };
-
-async function checkCandidateUrl(url: string, title: string): Promise<CheckResult> {
-  if (isBlockedSource(url)) return { ok: false, reason: "blocked" };
-  if (looksLikeGenericCareersPage(url)) return { ok: false, reason: "generic" };
-  if (await isLikelyClosed(url, title)) return { ok: false, reason: "closed" };
-  // Bot-protection (403/429/503) means we couldn't actually verify the page
-  // at all — not evidence it's open. Confirmed real case: OpenAI's
-  // Cloudflare challenge blocked our check on a posting whose real,
-  // browser-rendered page was a genuine 404. Route it through the same
-  // recovery attempt as a closed/generic/blocked link rather than silently
-  // trusting an unverifiable result.
-  if (await isLikelyBotBlocked(url)) return { ok: false, reason: "unverifiable" };
-  return { ok: true };
 }
 
 export async function POST() {
