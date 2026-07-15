@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   jsonb,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { TailoringPlan } from "@/lib/resume/types";
 
@@ -199,6 +200,39 @@ export const resumeProfile = pgTable("resume_profile", {
     .defaultNow(),
 }).enableRLS();
 
+/**
+ * Learned answers for recurring structured application questions, keyed by
+ * ATS platform (e.g. "greenhouse") and a lowercased substring pattern of the
+ * question text (matched with String.includes, not exact equality, since
+ * the same question is often phrased with the company name inserted —
+ * "Where have you learned about Acme?" vs "...about Samsara?"). Once a
+ * mapping exists, the Apply Run Brief surfaces it directly instead of the
+ * Computer needing to open the dropdown and rediscover its options from
+ * scratch on every application on that platform.
+ */
+export const platformFieldMappings = pgTable(
+  "platform_field_mappings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    platform: text("platform").notNull(),
+    questionPattern: text("question_pattern").notNull(),
+    answerValue: text("answer_value").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("platform_field_mappings_platform_pattern_idx").on(
+      table.platform,
+      table.questionPattern
+    ),
+  ]
+).enableRLS();
+
 export const storyBankEntries = pgTable("story_bank_entries", {
   id: uuid("id").defaultRandom().primaryKey(),
   slug: text("slug").notNull().unique(),
@@ -246,3 +280,4 @@ export type CandidateProfile = typeof candidateProfile.$inferSelect;
 export type ResumeProfile = typeof resumeProfile.$inferSelect;
 export type StoryBankEntry = typeof storyBankEntries.$inferSelect;
 export type JobSearchSuggestion = typeof jobSearchSuggestions.$inferSelect;
+export type PlatformFieldMapping = typeof platformFieldMappings.$inferSelect;

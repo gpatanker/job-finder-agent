@@ -1,5 +1,23 @@
-import type { ApplicationQuestion, CandidateProfile, Job, ResumeExperienceEntry } from "@/lib/db/schema";
+import type {
+  ApplicationQuestion,
+  CandidateProfile,
+  Job,
+  PlatformFieldMapping,
+  ResumeExperienceEntry,
+} from "@/lib/db/schema";
 import { formatExperienceSummary } from "./experience";
+
+function formatKnownMappings(mappings: PlatformFieldMapping[]): string {
+  if (mappings.length === 0) {
+    return "(None learned for this platform yet — discover options normally, and note any recurring question/answer pairs so they can be added for next time.)";
+  }
+  return mappings
+    .map(
+      (m) =>
+        `- If a question contains "${m.questionPattern}", answer "${m.answerValue}"${m.notes ? ` (${m.notes})` : ""} — if the form's exact option differs, pick the closest match rather than this literal string.`
+    )
+    .join("\n");
+}
 
 function formatSalary(job: Job): string {
   if (job.salaryText) return job.salaryText;
@@ -80,10 +98,19 @@ export function buildApplyRunBrief(params: {
   profile: CandidateProfile;
   experience: ResumeExperienceEntry[];
   approvedQuestions: ApplicationQuestion[];
+  knownFieldMappings: PlatformFieldMapping[];
   submitAuthorized: boolean;
   resumeRoute: string | null;
 }): string {
-  const { job, profile, experience, approvedQuestions, submitAuthorized, resumeRoute } = params;
+  const {
+    job,
+    profile,
+    experience,
+    approvedQuestions,
+    knownFieldMappings,
+    submitAuthorized,
+    resumeRoute,
+  } = params;
 
   const submitBlock = submitAuthorized
     ? "SUBMIT AUTHORIZATION: The user has explicitly authorized you to submit this application. You may complete the final submit step."
@@ -128,6 +155,9 @@ ${formatStructuredAnswers(profile, experience, job.company)}
 OPTIONAL DEMOGRAPHIC / EEO QUESTIONS (only if the application asks — these are always optional under EEO law, never a reason to stop)
 ${formatDemographics(profile)}
 
+KNOWN FIELD MAPPINGS FOR THIS PLATFORM (learned from prior applications — use these directly instead of rediscovering the dropdown's options first)
+${formatKnownMappings(knownFieldMappings)}
+
 APPROVED ANSWERS
 ${answersBlock}
 
@@ -138,5 +168,6 @@ OPERATING RULES FOR COMPUTER
 4. Use the common structured fields above for their matching dropdowns/short fields — pick the closest matching option the form actually offers, never a fabricated one.
 5. For any field not covered above, pause and ask the user rather than guessing.
 6. For any eligibility-gate question where the honest answer could disqualify the application (e.g. an experience-years threshold) and isn't a plain fact already given above, pause and ask the user how to answer — never decide this one yourself, in either direction.
-7. If submit authorization is included, submit only if all required fields are covered and the application form matches the packet.`;
+7. If the form requires an email-based verification code to submit, check the candidate's email for it yourself if you have access; otherwise pause and ask the user for the code.
+8. If submit authorization is included, submit only if all required fields are covered and the application form matches the packet.`;
 }

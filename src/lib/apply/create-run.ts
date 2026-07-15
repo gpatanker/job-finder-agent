@@ -2,7 +2,12 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { agentRunQueue, jobs, resumeProfile } from "@/lib/db/schema";
 import { buildApplyRunBrief } from "./brief";
-import { getApprovedQuestions, getCandidateProfileOrThrow } from "./data";
+import {
+  getApprovedQuestions,
+  getCandidateProfileOrThrow,
+  getFieldMappingsForPlatform,
+} from "./data";
+import { detectPlatform } from "@/lib/scraping";
 
 export type CreateAgentRunResult =
   | { ok: true; run: typeof agentRunQueue.$inferSelect }
@@ -53,11 +58,15 @@ export async function createAgentRun(params: {
 
   const approvedQuestions = await getApprovedQuestions(jobId);
   const [resume] = await db.select().from(resumeProfile).limit(1);
+  const knownFieldMappings = job.applyUrl
+    ? await getFieldMappingsForPlatform(detectPlatform(job.applyUrl))
+    : [];
   const brief = buildApplyRunBrief({
     job,
     profile,
     experience: resume?.data.experience ?? [],
     approvedQuestions,
+    knownFieldMappings,
     submitAuthorized,
     resumeRoute: job.tailoredResumeSlug ? `/api/resumes/${job.tailoredResumeSlug}` : null,
   });

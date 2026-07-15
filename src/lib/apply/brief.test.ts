@@ -4,6 +4,7 @@ import type {
   ApplicationQuestion,
   CandidateProfile,
   Job,
+  PlatformFieldMapping,
   ResumeExperienceEntry,
 } from "@/lib/db/schema";
 
@@ -93,6 +94,7 @@ describe("buildApplyRunBrief", () => {
       job,
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: "/api/resumes/acme-analyst",
@@ -106,6 +108,7 @@ describe("buildApplyRunBrief", () => {
       job,
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: true,
       resumeRoute: "/api/resumes/acme-analyst",
@@ -118,6 +121,7 @@ describe("buildApplyRunBrief", () => {
       job,
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: "/api/resumes/acme-analyst",
@@ -132,6 +136,7 @@ describe("buildApplyRunBrief", () => {
       job,
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [approvedQuestion],
       submitAuthorized: false,
       resumeRoute: null,
@@ -145,6 +150,7 @@ describe("buildApplyRunBrief", () => {
       job,
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
@@ -157,6 +163,7 @@ describe("buildApplyRunBrief", () => {
       job,
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
@@ -176,6 +183,7 @@ describe("buildApplyRunBrief", () => {
         disabilityStatus: "Yes, I have a disability",
       },
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
@@ -192,6 +200,7 @@ describe("buildApplyRunBrief", () => {
       job,
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
@@ -209,6 +218,7 @@ describe("buildApplyRunBrief", () => {
         job,
         profile: { ...profile, totalYearsExperience: 8 },
         experience,
+        knownFieldMappings: [],
         approvedQuestions: [],
         submitAuthorized: false,
         resumeRoute: null,
@@ -224,6 +234,7 @@ describe("buildApplyRunBrief", () => {
       job: { ...job, company: "Example Corp" },
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
@@ -236,6 +247,7 @@ describe("buildApplyRunBrief", () => {
       job: { ...job, company: "Some New Company" },
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
@@ -248,6 +260,7 @@ describe("buildApplyRunBrief", () => {
       job,
       profile,
       experience,
+      knownFieldMappings: [],
       approvedQuestions: [],
       submitAuthorized: false,
       resumeRoute: null,
@@ -255,4 +268,45 @@ describe("buildApplyRunBrief", () => {
     expect(brief).toContain("Zip code of primary residence: Not on file");
     expect(brief).toContain('"How did you hear about this opportunity?" default: Not on file');
   });
+
+  it("says no mappings are known yet for a platform with none on file", () => {
+    const brief = buildApplyRunBrief({
+      job,
+      profile,
+      experience,
+      knownFieldMappings: [],
+      approvedQuestions: [],
+      submitAuthorized: false,
+      resumeRoute: null,
+    });
+    expect(brief).toContain("None learned for this platform yet");
+  });
+
+  it(
+    "regression: surfaces learned platform field mappings directly so the Computer doesn't have to " +
+      "rediscover a dropdown's options on every application on that platform",
+    () => {
+      const mapping: PlatformFieldMapping = {
+        id: "map-1",
+        platform: "greenhouse",
+        questionPattern: "how did you hear about this opportunity",
+        answerValue: "LinkedIn Jobs",
+        notes: "falls back to closest LinkedIn-flavored option if exact label differs",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const brief = buildApplyRunBrief({
+        job,
+        profile,
+        experience,
+        knownFieldMappings: [mapping],
+        approvedQuestions: [],
+        submitAuthorized: false,
+        resumeRoute: null,
+      });
+      expect(brief).toContain('"how did you hear about this opportunity"');
+      expect(brief).toContain("LinkedIn Jobs");
+      expect(brief).toContain("falls back to closest LinkedIn-flavored option");
+    }
+  );
 });

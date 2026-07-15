@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { applicationQuestions, candidateProfile } from "@/lib/db/schema";
+import { applicationQuestions, candidateProfile, platformFieldMappings } from "@/lib/db/schema";
 import type { CandidateProfile } from "@/lib/db/schema";
 
 export async function getCandidateProfileOrThrow(): Promise<CandidateProfile> {
@@ -19,4 +19,11 @@ export async function getApprovedQuestions(jobId: string) {
     .from(applicationQuestions)
     .where(eq(applicationQuestions.jobId, jobId));
   return questions.filter((q) => q.status === "approved" || q.status === "submitted");
+}
+
+export async function getFieldMappingsForPlatform(platform: string) {
+  return db
+    .select()
+    .from(platformFieldMappings)
+    .where(eq(platformFieldMappings.platform, platform));
 }

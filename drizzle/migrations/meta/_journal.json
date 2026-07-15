@@ -50,6 +50,13 @@
       "when": 1784015087536,
       "tag": "0006_cuddly_red_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784075386038,
+      "tag": "0007_yellow_galactus",
+      "breakpoints": true
     }
   ]
 }

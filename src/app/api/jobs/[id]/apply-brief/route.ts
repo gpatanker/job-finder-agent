@@ -3,7 +3,12 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { jobs, resumeProfile } from "@/lib/db/schema";
 import { buildApplyRunBrief } from "@/lib/apply/brief";
-import { getApprovedQuestions, getCandidateProfileOrThrow } from "@/lib/apply/data";
+import {
+  getApprovedQuestions,
+  getCandidateProfileOrThrow,
+  getFieldMappingsForPlatform,
+} from "@/lib/apply/data";
+import { detectPlatform } from "@/lib/scraping";
 
 export async function GET(
   request: NextRequest,
@@ -29,11 +34,15 @@ export async function GET(
 
   const approvedQuestions = await getApprovedQuestions(id);
   const [resume] = await db.select().from(resumeProfile).limit(1);
+  const knownFieldMappings = job.applyUrl
+    ? await getFieldMappingsForPlatform(detectPlatform(job.applyUrl))
+    : [];
   const brief = buildApplyRunBrief({
     job,
     profile,
     experience: resume?.data.experience ?? [],
     approvedQuestions,
+    knownFieldMappings,
     submitAuthorized,
     resumeRoute: job.tailoredResumeSlug ? `/api/resumes/${job.tailoredResumeSlug}` : null,
   });
