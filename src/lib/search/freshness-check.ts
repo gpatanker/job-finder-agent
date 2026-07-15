@@ -16,10 +16,14 @@ const CLOSED_PHRASES = [
   "job you are looking for is no longer open",
 ];
 
+export function textIndicatesClosedPosting(text: string): boolean {
+  const normalized = text.toLowerCase().replace(/\s+/g, " ");
+  return CLOSED_PHRASES.some((phrase) => normalized.includes(phrase));
+}
+
 export function htmlIndicatesClosedPosting(html: string): boolean {
   const $ = cheerio.load(html);
-  const visibleText = $("body").text().toLowerCase().replace(/\s+/g, " ");
-  return CLOSED_PHRASES.some((phrase) => visibleText.includes(phrase));
+  return textIndicatesClosedPosting($("body").text());
 }
 
 function normalizePhrase(text: string): string {
@@ -28,6 +32,13 @@ function normalizePhrase(text: string): string {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Text-based counterpart to pageMentionsTitle, for callers that already have extracted plain text rather than raw HTML. */
+export function textMentionsTitle(text: string, title: string): boolean {
+  const normalizedTitle = normalizePhrase(title);
+  if (!normalizedTitle) return true;
+  return normalizePhrase(text).includes(normalizedTitle);
 }
 
 /**
@@ -41,11 +52,8 @@ function normalizePhrase(text: string): string {
  * "this page happens to mention some of the same words."
  */
 export function pageMentionsTitle(html: string, title: string): boolean {
-  const normalizedTitle = normalizePhrase(title);
-  if (!normalizedTitle) return true; // nothing to check against, don't block
   const $ = cheerio.load(html);
-  const pageText = normalizePhrase($("body").text());
-  return pageText.includes(normalizedTitle);
+  return textMentionsTitle($("body").text(), title);
 }
 
 /**

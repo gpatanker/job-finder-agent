@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import type { JobSearchSuggestion } from "@/lib/db/schema";
 
@@ -11,6 +11,30 @@ export function SearchClient({
 }) {
   const [suggestions, setSuggestions] = useState(initialSuggestions);
   const [running, setRunning] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [scoring, setScoring] = useState(false);
+
+  async function handleScoreUrl(e: FormEvent) {
+    e.preventDefault();
+    if (!urlInput.trim()) return;
+    setScoring(true);
+    try {
+      const res = await fetch("/api/search/score-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlInput.trim() }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to score that posting");
+      setSuggestions((s) => [body.suggestion, ...s]);
+      setUrlInput("");
+      toast.success(`${body.suggestion.company} — ${body.suggestion.title}: ${body.suggestion.matchScore}/100`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to score that posting");
+    } finally {
+      setScoring(false);
+    }
+  }
 
   async function handleRun() {
     setRunning(true);
@@ -76,6 +100,33 @@ export function SearchClient({
       >
         {running ? "Searching..." : "Find matching roles"}
       </button>
+
+      <form
+        onSubmit={handleScoreUrl}
+        className="flex flex-col gap-2 rounded-lg border border-black/10 p-3 dark:border-white/15 sm:flex-row sm:items-center"
+      >
+        <label className="text-sm font-medium sm:sr-only" htmlFor="score-url-input">
+          Check a specific job posting
+        </label>
+        <input
+          id="score-url-input"
+          type="url"
+          required
+          placeholder="Paste a job posting URL to check your fit"
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          className="w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50"
+          data-testid="score-url-input"
+        />
+        <button
+          type="submit"
+          disabled={scoring}
+          className="whitespace-nowrap rounded-md bg-black/5 px-3 py-2 text-sm font-medium disabled:opacity-50 dark:bg-white/10"
+          data-testid="score-url-button"
+        >
+          {scoring ? "Checking..." : "Check fit"}
+        </button>
+      </form>
 
       {suggestions.length === 0 ? (
         <p className="text-sm text-black/60 dark:text-white/60" data-testid="search-empty">
