@@ -22,12 +22,18 @@ export async function POST() {
     );
   }
 
+  // Deliberately NOT filtered by status: a suggestion the user already
+  // dismissed (or promoted, or that went stale) must stay excluded from
+  // future runs forever, not just while it's still sitting as "new" —
+  // otherwise a dismissed posting gets silently re-suggested by the very
+  // next search, which is exactly what real data showed was happening
+  // (the same company+title re-appearing as "new" days after being
+  // dismissed, sometimes more than once).
   const [existingJobs, existingSuggestions] = await Promise.all([
     db.select({ company: jobs.company, title: jobs.title }).from(jobs),
     db
       .select({ company: jobSearchSuggestions.company, title: jobSearchSuggestions.title })
-      .from(jobSearchSuggestions)
-      .where(eq(jobSearchSuggestions.status, "new")),
+      .from(jobSearchSuggestions),
   ]);
 
   const { candidates, warning } = await findJobCandidates({
