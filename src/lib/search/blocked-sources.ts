@@ -19,7 +19,14 @@ const BLOCKED_HOSTNAMES = new Set([
 // builtinnyc.com, builtinchicago.org, etc.) rather than one single
 // hostname — matched by pattern instead of trying to enumerate every
 // regional variant. Excluded per user direction.
-const BLOCKED_HOSTNAME_PATTERNS = [/^(www\.)?builtin[a-z]*\.(com|org)$/i];
+//
+// Welcome to the Jungle uses multiple subdomains (www.welcometothejungle.com,
+// app.welcometothejungle.com, and possibly others) — matched by subdomain
+// pattern for the same reason. Excluded per user direction.
+const BLOCKED_HOSTNAME_PATTERNS = [
+  /^(www\.)?builtin[a-z]*\.(com|org)$/i,
+  /(^|\.)welcometothejungle\.com$/i,
+];
 
 export function isBlockedSource(url: string): boolean {
   try {

@@ -31,6 +31,24 @@ describe("isBlockedSource", () => {
     expect(isBlockedSource("https://rebuilt.com/job/some-role")).toBe(false);
   });
 
+  it(
+    "blocks Welcome to the Jungle across its subdomains (excluded per user direction) — " +
+      "real case: the exact reported Crusoe posting URL",
+    () => {
+      expect(
+        isBlockedSource(
+          "https://www.welcometothejungle.com/en/companies/crusoe-energy-systems/jobs/strategy-and-operations-associate_san-francisco_2kjx6mwq"
+        )
+      ).toBe(true);
+      expect(isBlockedSource("https://app.welcometothejungle.com/jobs/oKrWWOxJ")).toBe(true);
+      expect(isBlockedSource("https://welcometothejungle.com/jobs/some-role")).toBe(true);
+    }
+  );
+
+  it("does not block an unrelated hostname that merely contains the phrase as a prefix", () => {
+    expect(isBlockedSource("https://notwelcometothejungle.com/jobs/some-role")).toBe(false);
+  });
+
   it("does not block a legitimate free-to-apply source", () => {
     expect(
       isBlockedSource("https://job-boards.greenhouse.io/anthropic/jobs/5138044008")
