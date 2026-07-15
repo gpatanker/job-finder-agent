@@ -8,6 +8,15 @@ import {
   getFieldMappingsForPlatform,
 } from "./data";
 import { detectPlatform } from "@/lib/scraping";
+import { checkCandidateUrl } from "@/lib/search/validate-candidate";
+import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
+
+const UNVERIFIED_REASON_TEXT: Record<string, string> = {
+  closed: "the posting appears to be closed or no longer available",
+  generic: "the apply link is a generic careers page, not a specific posting",
+  blocked: "the source requires payment to apply",
+  unverifiable: "the posting couldn't be verified (the site may be blocking automated checks)",
+};
 
 export type CreateAgentRunResult =
   | { ok: true; run: typeof agentRunQueue.$inferSelect }
@@ -23,6 +32,39 @@ export async function createAgentRun(params: {
   const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId));
   if (!job) {
     return { ok: false, status: 404, error: "Job not found" };
+  }
+
+  // Postings can go stale between being promoted into the pipeline and
+  // actually being queued to apply — confirmed real case: a Figma posting
+  // was still live when promoted, generated a tailored resume, and only
+  // turned out to be a 404 once someone actually tried to run the queued
+  // application. Catching it here (queue time) is as early as this app's
+  // architecture allows, since the actual apply run happens externally —
+  // there's no server-side "right before it starts" hook to check.
+  if (job.applyUrl) {
+    let check = await checkCandidateUrl(job.applyUrl, job.title);
+    if (!check.ok) {
+      const directUrl = await findDirectSourceUrl({ company: job.company, title: job.title });
+      if (directUrl) {
+        const recheck = await checkCandidateUrl(directUrl, job.title);
+        if (recheck.ok) {
+          check = recheck;
+          job.applyUrl = directUrl;
+          await db
+            .update(jobs)
+            .set({ applyUrl: directUrl, updatedAt: new Date() })
+            .where(eq(jobs.id, jobId));
+        }
+      }
+    }
+    if (!check.ok) {
+      const reasonText = UNVERIFIED_REASON_TEXT[check.reason] ?? "it failed a freshness check";
+      return {
+        ok: false,
+        status: 422,
+        error: `Can't queue this application — ${reasonText}. Check the apply link manually before trying again.`,
+      };
+    }
   }
 
   if (!force) {
