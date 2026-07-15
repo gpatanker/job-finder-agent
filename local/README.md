@@ -39,3 +39,13 @@ what's there.
 - **story-bank.seed.json** — an array of stories (`slug`, `title`, `tags`,
   `content`) used to ground generated interview/application answers. Keep
   these truthful — answer generation is grounded strictly in what's here.
+- **question-bank.seed.json** (optional) — a fixed bank of pre-written,
+  already-polished answers to recurring application-question archetypes
+  ("greatest achievement," "why this company," etc.), each keyed by a list
+  of paraphrased `question_variants`. Checked first, before story-bank
+  synthesis: an incoming question is matched against these (by meaning, not
+  keywords — variants like "greatest achievement" and "proudest
+  accomplishment" share almost no vocabulary) and the matched answer is
+  adapted for the specific company/role rather than regenerated from
+  scratch. Falls back to the story bank if nothing matches closely enough.
+  Safe to omit — seeding skips it gracefully if the file isn't there.

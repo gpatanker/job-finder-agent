@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { StoryBankEntry } from "@/lib/db/schema";
+import type { QuestionBankEntry, StoryBankEntry } from "@/lib/db/schema";
 import { selectRelevantStories } from "./select-stories";
+import { adaptFromQuestionBank } from "./question-bank";
 
 const MODEL = "claude-sonnet-5";
 
@@ -18,6 +19,11 @@ function deterministicAnswer(stories: StoryBankEntry[]): string {
  * Claude never to add experience beyond what's given, and the deterministic
  * fallback (used if the API is unavailable) simply returns the most
  * relevant story verbatim rather than guessing.
+ *
+ * Checks the question bank first (pre-written answers to recurring
+ * archetypes, adapted rather than synthesized from scratch — see
+ * question-bank.ts) and only falls back to story-bank synthesis if nothing
+ * in the bank matches closely enough.
  */
 export async function generateAnswer(params: {
   prompt: string;
@@ -25,7 +31,21 @@ export async function generateAnswer(params: {
   title: string;
   jobDescription?: string | null;
   stories: StoryBankEntry[];
-}): Promise<{ answer: string; sourceStories: string[] }> {
+  questionBank?: QuestionBankEntry[];
+}): Promise<{ answer: string; sourceStories: string[]; matchedQuestionBank?: boolean }> {
+  if (params.questionBank && params.questionBank.length > 0) {
+    const adapted = await adaptFromQuestionBank({
+      prompt: params.prompt,
+      company: params.company,
+      title: params.title,
+      jobDescription: params.jobDescription,
+      entries: params.questionBank,
+    });
+    if (adapted) {
+      return { answer: adapted, sourceStories: [], matchedQuestionBank: true };
+    }
+  }
+
   const queryText = [params.prompt, params.company, params.title, params.jobDescription]
     .filter(Boolean)
     .join(" ");

@@ -1,0 +1,20 @@
+{
+  "question_bank": [
+    {
+      "question_variants": [
+        "What is your greatest achievement?",
+        "What are you most proud of?",
+        "Tell us about your proudest accomplishment"
+      ],
+      "answer": "At Example Corp I built a reporting pipeline from scratch that cut manual data-validation work by 80%, with no prior playbook or dedicated team — just a problem I noticed and decided to fix."
+    },
+    {
+      "question_variants": [
+        "Why do you want to work here?",
+        "Why this company?",
+        "Why are you interested in this role?"
+      ],
+      "answer": "I've spent my career in [FIELD], and [COMPANY] is tackling [PROBLEM] — a problem I want to be close to. The mandate of this role matches how I've operated throughout my career: high ownership, cross-functional, and close to leadership."
+    }
+  ]
+}

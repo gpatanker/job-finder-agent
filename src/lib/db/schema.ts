@@ -233,6 +233,27 @@ export const platformFieldMappings = pgTable(
   ]
 ).enableRLS();
 
+/**
+ * A fixed bank of pre-written, already-polished answers to recurring
+ * application-question archetypes ("greatest achievement," "why this
+ * company," etc.), each keyed by a set of paraphrased variants. Distinct
+ * from storyBankEntries (raw narrative building blocks Claude synthesizes
+ * NEW answers from) — these are ready-made answers the candidate already
+ * uses, checked first and adapted (not regenerated from scratch) when an
+ * incoming question matches one closely enough in meaning.
+ */
+export const questionBankEntries = pgTable("question_bank_entries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  questionVariants: jsonb("question_variants").$type<string[]>().notNull().default([]),
+  answer: text("answer").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}).enableRLS();
+
 export const storyBankEntries = pgTable("story_bank_entries", {
   id: uuid("id").defaultRandom().primaryKey(),
   slug: text("slug").notNull().unique(),
@@ -281,3 +302,4 @@ export type ResumeProfile = typeof resumeProfile.$inferSelect;
 export type StoryBankEntry = typeof storyBankEntries.$inferSelect;
 export type JobSearchSuggestion = typeof jobSearchSuggestions.$inferSelect;
 export type PlatformFieldMapping = typeof platformFieldMappings.$inferSelect;
+export type QuestionBankEntry = typeof questionBankEntries.$inferSelect;

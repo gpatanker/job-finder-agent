@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { applicationQuestions, jobs, storyBankEntries } from "@/lib/db/schema";
+import { applicationQuestions, jobs, questionBankEntries, storyBankEntries } from "@/lib/db/schema";
 import { generateAnswer } from "@/lib/answers/generate-answer";
 
 export async function POST(
@@ -23,28 +23,33 @@ export async function POST(
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
-  const stories = await db.select().from(storyBankEntries);
-  if (stories.length === 0) {
+  const [stories, questionBank] = await Promise.all([
+    db.select().from(storyBankEntries),
+    db.select().from(questionBankEntries),
+  ]);
+
+  if (stories.length === 0 && questionBank.length === 0) {
     return NextResponse.json(
       {
         error:
-          "No story bank entries seeded yet. Add some in Settings, or fill in local/story-bank.seed.json and run `npm run db:seed-profile`.",
+          "No story bank or question bank entries seeded yet. Add some in Settings, or fill in local/story-bank.seed.json / local/question-bank.seed.json and run `npm run db:seed-profile`.",
       },
       { status: 400 }
     );
   }
 
-  const { answer, sourceStories } = await generateAnswer({
+  const { answer, sourceStories, matchedQuestionBank } = await generateAnswer({
     prompt: question.prompt,
     company: job.company,
     title: job.title,
     jobDescription: job.jobDescription,
     stories,
+    questionBank,
   });
 
   if (!answer) {
     return NextResponse.json(
-      { error: "Couldn't find a relevant story to ground an answer in for this prompt." },
+      { error: "Couldn't find a relevant story or question-bank match to ground an answer in for this prompt." },
       { status: 422 }
     );
   }
@@ -59,5 +64,5 @@ export async function POST(
     .where(eq(applicationQuestions.id, id))
     .returning();
 
-  return NextResponse.json({ question: updated, sourceStories });
+  return NextResponse.json({ question: updated, sourceStories, matchedQuestionBank });
 }

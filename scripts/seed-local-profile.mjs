@@ -1,6 +1,7 @@
-// Seeds candidate_profile / resume_profile / story_bank_entries from the
-// gitignored local/*.seed.json files. Safe to re-run (idempotent): singleton
-// tables are replaced wholesale, story bank entries are upserted by slug.
+// Seeds candidate_profile / resume_profile / story_bank_entries / (optionally)
+// question_bank_entries from the gitignored local/*.seed.json files. Safe to
+// re-run (idempotent): singleton tables are replaced wholesale, story bank
+// entries are upserted by slug, question bank entries are replaced wholesale.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -24,6 +25,16 @@ function readJson(relativePath) {
   }
 }
 
+function readJsonOptional(relativePath) {
+  const fullPath = path.join(root, relativePath);
+  try {
+    return JSON.parse(readFileSync(fullPath, "utf-8"));
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+}
+
 async function main() {
   if (!process.env.DATABASE_URL) {
     console.error("DATABASE_URL is not set. Run with: npm run db:seed-profile");
@@ -33,6 +44,7 @@ async function main() {
   const profile = readJson("local/profile.seed.json");
   const resume = readJson("local/resume.seed.json");
   const stories = readJson("local/story-bank.seed.json");
+  const questionBankFile = readJsonOptional("local/question-bank.seed.json");
 
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
 
@@ -80,6 +92,20 @@ async function main() {
     `;
   }
   console.log(`story_bank_entries seeded (${stories.length} entries)`);
+
+  if (questionBankFile) {
+    const entries = questionBankFile.question_bank ?? [];
+    await sql`delete from question_bank_entries`;
+    for (const entry of entries) {
+      await sql`
+        insert into question_bank_entries (question_variants, answer)
+        values (${sql.json(entry.question_variants ?? [])}, ${entry.answer})
+      `;
+    }
+    console.log(`question_bank_entries seeded (${entries.length} entries)`);
+  } else {
+    console.log("question_bank_entries skipped (no local/question-bank.seed.json — see local/README.md)");
+  }
 
   await sql.end();
 }
