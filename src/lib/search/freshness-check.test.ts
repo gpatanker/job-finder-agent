@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { htmlIndicatesClosedPosting, isLikelyClosed, pageMentionsTitle } from "./freshness-check";
+import {
+  htmlIndicatesClosedPosting,
+  isLikelyBotBlocked,
+  isLikelyClosed,
+  pageMentionsTitle,
+} from "./freshness-check";
 
 describe("htmlIndicatesClosedPosting", () => {
   it("detects the exact banner seen on a real closed aggregator listing", () => {
@@ -151,5 +156,45 @@ describe("isLikelyClosed", () => {
       })
     );
     expect(await isLikelyClosed("https://example.com/no-title-given")).toBe(false);
+  });
+});
+
+describe("isLikelyBotBlocked", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it(
+    "regression: flags a 403 as bot-blocked rather than assuming the page confirmed open " +
+      "(real case: OpenAI's Cloudflare challenge returned 403 for a posting whose real, " +
+      "browser-rendered page was a genuine custom 404 — isLikelyClosed alone silently passed it through)",
+    async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: false, status: 403, text: async () => "<html>challenge page</html>" })
+      );
+      expect(await isLikelyBotBlocked("https://openai.com/careers/some-role")).toBe(true);
+    }
+  );
+
+  it("flags 429 (rate limited) and 503 (often a bot-mitigation status) as blocked", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 429 }));
+    expect(await isLikelyBotBlocked("https://example.com/rate-limited")).toBe(true);
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    expect(await isLikelyBotBlocked("https://example.com/service-unavailable")).toBe(true);
+  });
+
+  it("does not flag a normal 200 or a plain 404 as bot-blocked", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    expect(await isLikelyBotBlocked("https://example.com/live-page")).toBe(false);
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    expect(await isLikelyBotBlocked("https://example.com/genuinely-gone")).toBe(false);
+  });
+
+  it("defaults to not-blocked when the fetch throws (network error, timeout)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network error")));
+    expect(await isLikelyBotBlocked("https://example.com/unreachable")).toBe(false);
   });
 });

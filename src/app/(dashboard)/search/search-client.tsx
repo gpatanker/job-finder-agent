@@ -52,6 +52,9 @@ export function SearchClient({
         body.filteredBlockedSource > 0
           ? `${body.filteredBlockedSource} filtered — source requires payment to apply`
           : null,
+        body.filteredUnverifiable > 0
+          ? `${body.filteredUnverifiable} filtered — couldn't verify (bot-blocked)`
+          : null,
       ].filter(Boolean);
       toast.success(
         `Found ${body.found}, added ${body.added} new suggestions${notes.length ? ` (${notes.join(", ")})` : ""}`

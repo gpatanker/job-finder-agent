@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { candidateProfile, jobSearchSuggestions, jobs } from "@/lib/db/schema";
 import { findJobCandidates, type JobCandidate } from "@/lib/search/job-search-agent";
-import { isLikelyClosed } from "@/lib/search/freshness-check";
+import { isLikelyBotBlocked, isLikelyClosed } from "@/lib/search/freshness-check";
 import { looksLikeGenericCareersPage } from "@/lib/search/specificity-check";
 import { isBlockedSource } from "@/lib/search/blocked-sources";
 import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
@@ -14,12 +14,19 @@ function normalize(company: string, title: string): string {
 
 type CheckResult =
   | { ok: true }
-  | { ok: false; reason: "blocked" | "generic" | "closed" };
+  | { ok: false; reason: "blocked" | "generic" | "closed" | "unverifiable" };
 
 async function checkCandidateUrl(url: string, title: string): Promise<CheckResult> {
   if (isBlockedSource(url)) return { ok: false, reason: "blocked" };
   if (looksLikeGenericCareersPage(url)) return { ok: false, reason: "generic" };
   if (await isLikelyClosed(url, title)) return { ok: false, reason: "closed" };
+  // Bot-protection (403/429/503) means we couldn't actually verify the page
+  // at all — not evidence it's open. Confirmed real case: OpenAI's
+  // Cloudflare challenge blocked our check on a posting whose real,
+  // browser-rendered page was a genuine 404. Route it through the same
+  // recovery attempt as a closed/generic/blocked link rather than silently
+  // trusting an unverifiable result.
+  if (await isLikelyBotBlocked(url)) return { ok: false, reason: "unverifiable" };
   return { ok: true };
 }
 
@@ -58,6 +65,7 @@ export async function POST() {
   let filteredClosed = 0;
   let filteredGeneric = 0;
   let filteredBlockedSource = 0;
+  let filteredUnverifiable = 0;
 
   // Deterministic backstops on top of the agent's own instructions:
   // 1. Actually fetch each candidate's apply page and look for
@@ -96,6 +104,7 @@ export async function POST() {
     if (!check.ok) {
       if (check.reason === "blocked") filteredBlockedSource++;
       else if (check.reason === "generic") filteredGeneric++;
+      else if (check.reason === "unverifiable") filteredUnverifiable++;
       else filteredClosed++;
       continue;
     }
@@ -133,6 +142,7 @@ export async function POST() {
     filteredClosed,
     filteredGeneric,
     filteredBlockedSource,
+    filteredUnverifiable,
     warning,
     suggestions,
   });

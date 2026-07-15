@@ -98,3 +98,35 @@ export async function isLikelyClosed(
     clearTimeout(timeout);
   }
 }
+
+/**
+ * Separate from isLikelyClosed: a 403/429/503 means our request was
+ * blocked (bot protection, rate limiting), not that the page confirmed
+ * open — isLikelyClosed already treats any non-404/410 non-ok status as
+ * "assume open" for good reason (a 500 or network hiccup shouldn't sink a
+ * possibly-good lead), but a bot-protection block is different: it means
+ * we genuinely can't see the page at all. Confirmed real case: OpenAI's
+ * Cloudflare challenge returned 403 for a posting whose real,
+ * browser-rendered page was a genuine custom 404 — our fetch-based check
+ * silently passed it through as "not closed" when it couldn't actually
+ * verify anything either way. Callers should treat this as "try the
+ * recovery path" rather than a hard rejection, since it's not evidence of
+ * closure, just an inability to confirm openness.
+ */
+export async function isLikelyBotBlocked(url: string, timeoutMs = 8000): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; JobFinderAgent/1.0; +personal job application tracker)",
+      },
+    });
+    return res.status === 403 || res.status === 429 || res.status === 503;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
