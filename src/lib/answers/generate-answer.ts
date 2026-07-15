@@ -51,9 +51,9 @@ export async function generateAnswer(params: {
     const systemPrompt = `You draft first-person answers to job application questions, grounded strictly in the candidate's provided story bank. Rules:
 - Use ONLY facts, numbers, and experiences present in the provided stories below. Never invent experience, employers, numbers, or outcomes.
 - First person, natural and human — not generic corporate language.
-- Concise unless the question explicitly asks for depth/detail.
+- Default to 2 short paragraphs or fewer, even for "why this company" style questions — err on the side of shorter unless the question explicitly asks for depth/detail.
 - Emphasize fit for the specific role and company where the stories genuinely support it.
-- Use quantified impact from the stories when present.
+- Don't stack numbers — at most one concrete metric only if it's genuinely load-bearing for the point being made. Prioritize narrative fit over a list of quantified stats.
 ${isPalantir ? "" : "- Do not mention Palantir or make this Palantir-specific — this role is not at Palantir."}
 - Output ONLY the answer text. No preamble, no "Here's a draft", no markdown formatting.`;
 
