@@ -6,7 +6,8 @@ import { findJobCandidates, type JobCandidate } from "@/lib/search/job-search-ag
 import { checkCandidateUrl } from "@/lib/search/validate-candidate";
 import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
 
-const MIN_RESULTS_BEFORE_WIDENING = 5;
+const TARGET_NEW_SUGGESTIONS = 12;
+const MAX_WIDEN_PASSES = 1;
 const MAX_NEW_SUGGESTIONS_PER_COMPANY = 2;
 
 function normalize(company: string, title: string): string {
@@ -163,21 +164,22 @@ export async function POST() {
   };
 
   let knownJobs = allKnown.map((j) => ({ company: j.company, title: j.title }));
-  const { candidates, warning } = await findJobCandidates({ profile, knownJobs });
-  const found = candidates.length;
+  const { candidates, warning: firstWarning } = await findJobCandidates({ profile, knownJobs });
+  let found = candidates.length;
   await processCandidates(candidates, state);
 
-  // If the primary pass came back thin, run one broadening follow-up
+  // If the run came back thin, keep running broadening follow-up passes
   // rather than accepting a near-empty result — real case: a narrow
   // industries list ("AI infrastructure", famous AI labs) had already been
   // substantially covered by prior runs, so a plain repeat search mostly
-  // just re-found already-known postings. The known-jobs list here
-  // includes everything added in the primary pass, so this pass won't
-  // re-suggest those.
-  let widened = false;
-  let foundOnWiden = 0;
-  if (state.added < MIN_RESULTS_BEFORE_WIDENING) {
-    widened = true;
+  // just re-found already-known postings. Each pass's known-jobs list
+  // includes everything added by every prior pass this run, so later
+  // passes don't re-suggest earlier finds. Bounded by MAX_WIDEN_PASSES so
+  // a genuinely exhausted market doesn't spin forever burning API calls.
+  let widenPasses = 0;
+  let lastWarning = firstWarning;
+  while (state.added < TARGET_NEW_SUGGESTIONS && widenPasses < MAX_WIDEN_PASSES) {
+    widenPasses++;
     const newlyKnown = await db
       .select({ company: jobSearchSuggestions.company, title: jobSearchSuggestions.title })
       .from(jobSearchSuggestions);
@@ -186,8 +188,13 @@ export async function POST() {
       ...newlyKnown,
     ];
     const widenResult = await findJobCandidates({ profile, knownJobs, broaden: true });
-    foundOnWiden = widenResult.candidates.length;
+    found += widenResult.candidates.length;
+    lastWarning = widenResult.warning ?? lastWarning;
+    const addedBefore = state.added;
     await processCandidates(widenResult.candidates, state);
+    // Stop widening once a pass adds nothing new — the market's exhausted
+    // for this run, not just thin, so further passes would just burn calls.
+    if (state.added === addedBefore) break;
   }
 
   const suggestions = await db
@@ -196,7 +203,7 @@ export async function POST() {
     .where(eq(jobSearchSuggestions.status, "new"));
 
   return NextResponse.json({
-    found: found + foundOnWiden,
+    found,
     added: state.added,
     skipped: state.skipped,
     recovered: state.recovered,
@@ -205,8 +212,9 @@ export async function POST() {
     filteredBlockedSource: state.filteredBlockedSource,
     filteredUnverifiable: state.filteredUnverifiable,
     filteredDiversityCap: state.filteredDiversityCap,
-    widened,
-    warning,
+    widened: widenPasses > 0,
+    widenPasses,
+    warning: lastWarning,
     suggestions,
   });
 }

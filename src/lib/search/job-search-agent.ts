@@ -3,7 +3,7 @@ import type { CandidateProfile } from "@/lib/db/schema";
 
 const MODEL = "claude-sonnet-5";
 const TOOL_NAME = "submit_job_candidates";
-const MAX_WEB_SEARCHES = 25;
+const MAX_WEB_SEARCHES = 12;
 const OVERREPRESENTED_THRESHOLD = 3;
 
 export type JobCandidate = {
