@@ -56,9 +56,14 @@ export function SearchClient({
         body.filteredUnverifiable > 0
           ? `${body.filteredUnverifiable} filtered — couldn't verify (bot-blocked)`
           : null,
+        body.filteredDiversityCap > 0
+          ? `${body.filteredDiversityCap} filtered — too many from one company this run`
+          : null,
       ].filter(Boolean);
       toast.success(
-        `Found ${body.found}, added ${body.added} new suggestions${notes.length ? ` (${notes.join(", ")})` : ""}`
+        `Found ${body.found}, added ${body.added} new suggestions${notes.length ? ` (${notes.join(", ")})` : ""}${
+          body.widened ? " — broadened search after a thin first pass" : ""
+        }`
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Search failed");
