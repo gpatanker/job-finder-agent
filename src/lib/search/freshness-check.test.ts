@@ -57,6 +57,16 @@ describe("pageMentionsTitle", () => {
   it("does not block when no title is given to check against", () => {
     expect(pageMentionsTitle("<body>anything</body>", "")).toBe(true);
   });
+
+  it("fuzzy match: recognizes a live posting whose page title adds a seniority/role qualifier the agent's reported title omits", () => {
+    const html = `<body><h1>Senior Revenue Strategy & Operations Manager</h1><p>Apply now</p></body>`;
+    expect(pageMentionsTitle(html, "Revenue Strategy & Operations")).toBe(true);
+  });
+
+  it("fuzzy match still requires the exact phrase for short, generic titles (avoids false negatives on a company's general listings page)", () => {
+    const html = `<body><h2>Business Development Representative</h2><h2>Operations Coordinator</h2></body>`;
+    expect(pageMentionsTitle(html, "Operations Manager")).toBe(false);
+  });
 });
 
 describe("isLikelyClosed", () => {

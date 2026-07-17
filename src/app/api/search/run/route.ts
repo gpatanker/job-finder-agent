@@ -6,7 +6,7 @@ import { findJobCandidates, type JobCandidate } from "@/lib/search/job-search-ag
 import { checkCandidateUrl } from "@/lib/search/validate-candidate";
 import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
 
-const TARGET_NEW_SUGGESTIONS = 12;
+const TARGET_NEW_SUGGESTIONS = 20;
 const MAX_WIDEN_PASSES = 1;
 const MAX_NEW_SUGGESTIONS_PER_COMPANY = 2;
 

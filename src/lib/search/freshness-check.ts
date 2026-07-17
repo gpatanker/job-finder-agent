@@ -34,11 +34,37 @@ function normalizePhrase(text: string): string {
     .trim();
 }
 
-/** Text-based counterpart to pageMentionsTitle, for callers that already have extracted plain text rather than raw HTML. */
+/**
+ * Text-based counterpart to pageMentionsTitle, for callers that already have
+ * extracted plain text rather than raw HTML.
+ *
+ * Requiring the exact title phrase as a substring (the original approach) is
+ * stricter than it needs to be: a live posting commonly renders the title
+ * with an extra seniority/location qualifier the search agent's reported
+ * title doesn't include (e.g. page says "Senior Revenue Strategy &
+ * Operations Manager", agent reported "Revenue Strategy & Operations") —
+ * that's still the same posting, just phrased slightly differently, and the
+ * old exact-phrase check would wrongly mark it closed. So: an exact
+ * substring match still short-circuits to true, but otherwise we fall back
+ * to word-overlap — most (>=70%) of the title's significant words must
+ * appear somewhere on the page. Overlap alone is too loose for short,
+ * generic titles ("Operations Manager") where a company's general listings
+ * page could coincidentally contain both words for an unrelated role — the
+ * real case that motivated the strict check in the first place — so titles
+ * with 2 or fewer significant words still require the exact phrase.
+ */
 export function textMentionsTitle(text: string, title: string): boolean {
   const normalizedTitle = normalizePhrase(title);
   if (!normalizedTitle) return true;
-  return normalizePhrase(text).includes(normalizedTitle);
+  const normalizedText = normalizePhrase(text);
+  if (normalizedText.includes(normalizedTitle)) return true;
+
+  const titleWords = normalizedTitle.split(" ").filter(Boolean);
+  if (titleWords.length <= 2) return false;
+
+  const textWords = new Set(normalizedText.split(" ").filter(Boolean));
+  const matched = titleWords.filter((w) => textWords.has(w)).length;
+  return matched / titleWords.length >= 0.7;
 }
 
 /**
