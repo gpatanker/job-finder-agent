@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeOverrepresentedCompanies } from "./job-search-agent";
+import { computeOverrepresentedCompanies, isOverSeniorTitle } from "./job-search-agent";
 
 describe("computeOverrepresentedCompanies", () => {
   it(
@@ -43,5 +43,28 @@ describe("computeOverrepresentedCompanies", () => {
       "A (4 prior suggestions)",
       "B (3 prior suggestions)",
     ]);
+  });
+});
+
+describe("isOverSeniorTitle", () => {
+  it(
+    "regression: flags Director/Head of/VP titles above the candidate's actual reach " +
+      "(real case: search surfaced \"Airwallex — Director, Revenue Strategy & Operations\" " +
+      "and \"OpenFX — Head of Business Operations\" though the candidate's ceiling is Senior Manager)",
+    () => {
+      expect(isOverSeniorTitle("Director, Revenue Strategy & Operations")).toBe(true);
+      expect(isOverSeniorTitle("Head of Business Operations")).toBe(true);
+      expect(isOverSeniorTitle("Associate Director, Strategy & Operations")).toBe(true);
+      expect(isOverSeniorTitle("Senior Director, GTM Operations")).toBe(true);
+      expect(isOverSeniorTitle("VP of Operations")).toBe(true);
+      expect(isOverSeniorTitle("Vice President, Business Operations")).toBe(true);
+    }
+  );
+
+  it("does not flag titles at or below the candidate's reach", () => {
+    expect(isOverSeniorTitle("Senior Manager, Business Operations")).toBe(false);
+    expect(isOverSeniorTitle("Manager, Strategy & Operations")).toBe(false);
+    expect(isOverSeniorTitle("Business Operations Lead")).toBe(false);
+    expect(isOverSeniorTitle("Principal, GTM Strategy")).toBe(false);
   });
 });

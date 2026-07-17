@@ -6,6 +6,16 @@ const TOOL_NAME = "submit_job_candidates";
 const MAX_WEB_SEARCHES = 12;
 const OVERREPRESENTED_THRESHOLD = 3;
 
+/**
+ * The candidate's actual reach tops out at Senior Manager — confirmed live
+ * (2026-07-17) after the search kept surfacing Director/Head of/VP titles
+ * (e.g. "Airwallex — Director, Revenue Strategy & Operations", "OpenFX —
+ * Head of Business Operations") the candidate isn't qualified for. This is
+ * a deterministic backstop on top of the prompt instruction below, since
+ * the model doesn't always honor a seniority ceiling reliably.
+ */
+const OVER_SENIOR_TITLE_REGEX = /\b(director|head of|vice president|\bvp\b|\bsvp\b|\bevp\b)\b/i;
+
 export type JobCandidate = {
   company: string;
   title: string;
@@ -59,6 +69,10 @@ const submitTool = {
     required: ["candidates"],
   },
 };
+
+export function isOverSeniorTitle(title: string): boolean {
+  return OVER_SENIOR_TITLE_REGEX.test(title);
+}
 
 export function computeOverrepresentedCompanies(knownJobs: { company: string; title: string }[]): string[] {
   const counts = new Map<string, number>();
@@ -129,6 +143,8 @@ SCORING RUBRIC for matchScore (0-100) — apply consistently:
 - Higher for: title closely matching the BizOps/Strategy & Ops/GTM Ops/RevOps/Technical Ops family; work involving technical or infrastructure operations, cloud, AI, data, support ops, or GTM ops; location in the candidate's stated metros or explicitly remote-US; salary (if listed) at or above the candidate's stated floor.
 - Lower for: pure customer-support IC roles, pure quota-carrying sales roles, pure finance/accounting roles, or roles requiring deep hands-on software engineering the candidate's background doesn't support.
 
+SENIORITY CEILING — the candidate's reach tops out at Senior Manager. Do NOT include Director, Senior Director, Associate Director, Head of, VP/Vice President, SVP, EVP, Chief-of-staff-as-a-title, or any more senior title, even if everything else about the role is a strong match. Manager, Senior Manager, Lead, Principal, and Staff-level titles are all fair game — it's specifically Director-and-above that's out of reach.
+
 Rules:
 - Only include postings you actually found via web_search in this conversation, with a real applyUrl/sourceUrl from the search results. Never fabricate a posting or guess a URL.
 - applyUrl MUST be a deep link directly to that specific posting (a Greenhouse/Ashby/Lever URL with a job ID, or a company career-site URL with a role-specific slug) — NEVER a generic careers/jobs landing page (e.g. "company.com/careers" or "company.com/join-us" with nothing after it). If you can't find the specific posting's direct link, search more specifically (e.g. "site:job-boards.greenhouse.io <company>" or "<company> <title> greenhouse") before giving up — if you still can't find a direct link, don't include that candidate.
@@ -193,6 +209,7 @@ Search the web for currently-open postings matching this profile, then submit yo
         typeof (c as JobCandidate).applyUrl === "string" &&
         typeof (c as JobCandidate).sourceUrl === "string"
     )
+    .filter((c) => !isOverSeniorTitle(c.title))
     .map((c) => ({
       ...c,
       matchScore: Math.max(0, Math.min(100, Math.round(Number(c.matchScore) || 0))),
