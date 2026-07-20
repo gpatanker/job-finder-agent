@@ -6,6 +6,7 @@ import { fetchHtml } from "@/lib/scraping/types";
 import { isBlockedSource } from "./blocked-sources";
 import { looksLikeGenericCareersPage } from "./specificity-check";
 import { textIndicatesClosedPosting, textMentionsTitle } from "./freshness-check";
+import { detectEmbeddedGreenhouseBoard } from "./live-board";
 
 const MODEL = "claude-sonnet-5";
 const TOOL_NAME = "submit_job_score";
@@ -53,12 +54,45 @@ function companyFromTitleTag(html: string): string | undefined {
 }
 
 /**
+ * Fetches one Greenhouse job's full detail (title/company/location/
+ * description) directly by board token + job ID — shared by both the
+ * direct job-boards.greenhouse.io link case and the embedded-widget case
+ * below, since both end up needing the exact same lookup once the token
+ * and ID are known.
+ */
+async function fetchGreenhouseJobText(boardToken: string, jobId: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://boards-api.greenhouse.io/v1/boards/${boardToken}/jobs/${jobId}`,
+      { headers: { "User-Agent": "Mozilla/5.0 (compatible; JobFinderAgent/1.0)" } }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      title?: string;
+      company_name?: string;
+      location?: { name?: string };
+      content?: string;
+    };
+    const descriptionText = cheerio.load(data.content ?? "")("body").text().trim();
+    const fields = labeledFields({
+      Title: data.title,
+      Company: data.company_name,
+      Location: data.location?.name,
+    });
+    return [fields, descriptionText].filter(Boolean).join("\n\n").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetches a single job posting's readable content, preferring a platform's
  * public Job Board API when one exists — far more reliable than scraping,
  * since these return clean structured fields (location, work mode) as JSON
  * rather than requiring extraction from prose or, worse, a client-rendered
  * page a plain fetch can't see at all:
- *   - Greenhouse: boards-api.greenhouse.io (also used in scraping/greenhouse.ts)
+ *   - Greenhouse: boards-api.greenhouse.io (also used in scraping/greenhouse.ts),
+ *     including companies that embed the widget on their own domain
  *   - Ashby: api.ashbyhq.com/posting-api — confirmed real case: a Physical
  *     Intelligence posting's Location ("San Francisco") was clearly visible
  *     on the page but missing from a plain-fetch/meta-description
@@ -77,28 +111,26 @@ async function extractPageText(url: string): Promise<string | null> {
       const match = pathname.match(/^\/([^/]+)\/jobs\/(\d+)/);
       if (match) {
         const [, boardToken, jobId] = match;
-        const res = await fetch(
-          `https://boards-api.greenhouse.io/v1/boards/${boardToken}/jobs/${jobId}`,
-          { headers: { "User-Agent": "Mozilla/5.0 (compatible; JobFinderAgent/1.0)" } }
-        );
-        if (res.ok) {
-          const data = (await res.json()) as {
-            title?: string;
-            company_name?: string;
-            location?: { name?: string };
-            content?: string;
-          };
-          const descriptionText = cheerio.load(data.content ?? "")("body").text().trim();
-          const fields = labeledFields({
-            Title: data.title,
-            Company: data.company_name,
-            Location: data.location?.name,
-          });
-          return [fields, descriptionText].filter(Boolean).join("\n\n").trim() || null;
-        }
+        const text = await fetchGreenhouseJobText(boardToken, jobId);
+        if (text) return text;
       }
     } catch {
       // fall through to the generic path below
+    }
+  }
+
+  // Some companies embed Greenhouse's widget directly on their own domain
+  // (e.g. buildops.com/careers/job-application?gh_jid=6100196004) instead
+  // of linking to job-boards.greenhouse.io — detectPlatform won't recognize
+  // this shape, and the specific job title only renders client-side, so a
+  // plain fetch below would only see the generic page shell. The embed
+  // script's own `for=` parameter reveals the real board token even though
+  // the rest of the page doesn't. Confirmed real case: BuildOps.
+  if (platform !== "greenhouse" && platform !== "ashby") {
+    const embedded = await detectEmbeddedGreenhouseBoard(url);
+    if (embedded) {
+      const text = await fetchGreenhouseJobText(embedded.boardToken, embedded.jobId);
+      if (text) return text;
     }
   }
 

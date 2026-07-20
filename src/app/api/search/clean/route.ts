@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { jobSearchSuggestions } from "@/lib/db/schema";
-import { checkCandidateUrl } from "@/lib/search/validate-candidate";
-import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
+import { resolveCandidateFreshness, type LiveBoardCache } from "@/lib/search/resolve-freshness";
 
 /**
  * Re-validates every currently-suggested ("new") job posting against the
@@ -11,9 +10,11 @@ import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
  * can go stale, get taken down, or turn out to be behind a paywall/bot
  * wall sometime *after* being suggested, and this list was never
  * re-checked once inserted. Marks failures "stale" (distinct from
- * user-driven "dismissed", so it's clear *why* something disappeared) and
- * gives each failure the same one-shot recovery attempt used elsewhere
- * before giving up on it.
+ * user-driven "dismissed", so it's clear *why* something disappeared).
+ * Uses the same live-ATS-board check as api/search/run: a company on
+ * Greenhouse or Ashby gets checked against its own current job list
+ * directly (fresh by construction, no LLM call); anything else falls back
+ * to the per-page check plus a one-shot recovery search, as before.
  */
 export async function POST() {
   const suggestions = await db
@@ -31,29 +32,24 @@ export async function POST() {
     unverifiable: 0,
   };
 
+  const liveBoardCache: LiveBoardCache = new Map();
+
   for (const s of suggestions) {
     if (!s.applyUrl) {
       kept++;
       continue;
     }
 
-    let check = await checkCandidateUrl(s.applyUrl, s.title);
-    let recoveredUrl: string | null = null;
+    const result = await resolveCandidateFreshness({
+      applyUrl: s.applyUrl,
+      sourceUrl: s.sourceUrl ?? s.applyUrl,
+      title: s.title,
+      company: s.company,
+      liveBoardCache,
+    });
 
-    if (!check.ok) {
-      const directUrl = await findDirectSourceUrl({ company: s.company, title: s.title });
-      if (directUrl) {
-        const recheck = await checkCandidateUrl(directUrl, s.title);
-        if (recheck.ok) {
-          check = recheck;
-          recoveredUrl = directUrl;
-          recovered++;
-        }
-      }
-    }
-
-    if (!check.ok) {
-      reasons[check.reason]++;
+    if (!result.ok) {
+      reasons[result.reason]++;
       removed++;
       await db
         .update(jobSearchSuggestions)
@@ -62,10 +58,11 @@ export async function POST() {
       continue;
     }
 
-    if (recoveredUrl) {
+    if (result.recovered) {
+      recovered++;
       await db
         .update(jobSearchSuggestions)
-        .set({ applyUrl: recoveredUrl, sourceUrl: recoveredUrl, updatedAt: new Date() })
+        .set({ applyUrl: result.applyUrl, sourceUrl: result.sourceUrl, updatedAt: new Date() })
         .where(eq(jobSearchSuggestions.id, s.id));
     }
     kept++;

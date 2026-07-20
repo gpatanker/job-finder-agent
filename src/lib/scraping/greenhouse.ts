@@ -83,7 +83,7 @@ type GreenhouseApiResponse = {
  * unauthenticated, intended for third-party consumption) and works for both
  * this SPA template and the legacy server-rendered one, so we try it first.
  */
-function extractGreenhouseIds(url: string): { boardToken: string; jobId: string } | null {
+export function extractGreenhouseIds(url: string): { boardToken: string; jobId: string } | null {
   try {
     const { pathname } = new URL(url);
     const match = pathname.match(/^\/([^/]+)\/jobs\/(\d+)/);

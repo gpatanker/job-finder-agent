@@ -3,8 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { candidateProfile, jobSearchSuggestions, jobs } from "@/lib/db/schema";
 import { findJobCandidates, type JobCandidate } from "@/lib/search/job-search-agent";
-import { checkCandidateUrl } from "@/lib/search/validate-candidate";
-import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
+import { resolveCandidateFreshness, type LiveBoardCache } from "@/lib/search/resolve-freshness";
 
 const TARGET_NEW_SUGGESTIONS = 20;
 const MAX_WIDEN_PASSES = 1;
@@ -40,49 +39,54 @@ type RunState = {
 
 /**
  * Deterministic backstops on top of the agent's own instructions:
- * 1. Actually fetch each candidate's apply page and look for "closed"/
- *    "filled" wording (plus a title-mention check) or bot-blocking, since
- *    web search results (especially aggregator mirrors) can be stale.
+ * 1. For a company on Greenhouse or Ashby (detectable from the URL itself),
+ *    check the company's own live, unauthenticated job-board API directly
+ *    — the source of truth, not a crawled snapshot — instead of paying for
+ *    an LLM to search the web again. Falls back to fetching the candidate's
+ *    specific apply page and looking for "closed"/"filled" wording (plus a
+ *    title-mention check) or bot-blocking when the platform isn't
+ *    detected or the live-board fetch itself fails.
  * 2. Reject applyUrls that are just a generic careers/jobs landing page.
  * 3. Reject known paywalled/excluded sources.
  * 4. Cap new suggestions per company per run so one prolific company
  *    doesn't crowd out diversity across a single search.
- * When a candidate fails the URL checks, it gets one recovery attempt: a
- * targeted follow-up search for the same role directly on the company's
- * own careers page/ATS, re-validated through the same checks, rather than
- * dropping a possibly-good match just because the first link was bad.
+ * A candidate whose live-board check finds no matching role is treated as
+ * closed directly (the live board is authoritative — no LLM recovery call
+ * needed). Only candidates that fall back to the per-page check get one
+ * recovery attempt: a targeted follow-up search for the same role directly
+ * on the company's own careers page/ATS, re-validated the same way.
  */
-async function processCandidates(candidates: JobCandidate[], state: RunState): Promise<void> {
-  const initialChecks = await Promise.all(
-    candidates.map((c) => checkCandidateUrl(c.applyUrl, c.title))
+async function processCandidates(
+  candidates: JobCandidate[],
+  state: RunState,
+  liveBoardCache: LiveBoardCache
+): Promise<void> {
+  const results = await Promise.all(
+    candidates.map((c) =>
+      resolveCandidateFreshness({
+        applyUrl: c.applyUrl,
+        sourceUrl: c.sourceUrl,
+        title: c.title,
+        company: c.company,
+        liveBoardCache,
+      })
+    )
   );
 
   for (let i = 0; i < candidates.length; i++) {
     let candidate: JobCandidate = candidates[i];
-    let check = initialChecks[i];
+    const result = results[i];
 
-    if (!check.ok) {
-      const directUrl = await findDirectSourceUrl({
-        company: candidate.company,
-        title: candidate.title,
-      });
-      if (directUrl) {
-        const recheck = await checkCandidateUrl(directUrl, candidate.title);
-        if (recheck.ok) {
-          candidate = { ...candidate, applyUrl: directUrl, sourceUrl: directUrl };
-          check = recheck;
-          state.recovered++;
-        }
-      }
-    }
-
-    if (!check.ok) {
-      if (check.reason === "blocked") state.filteredBlockedSource++;
-      else if (check.reason === "generic") state.filteredGeneric++;
-      else if (check.reason === "unverifiable") state.filteredUnverifiable++;
+    if (!result.ok) {
+      if (result.reason === "blocked") state.filteredBlockedSource++;
+      else if (result.reason === "generic") state.filteredGeneric++;
+      else if (result.reason === "unverifiable") state.filteredUnverifiable++;
       else state.filteredClosed++;
       continue;
     }
+
+    if (result.recovered) state.recovered++;
+    candidate = { ...candidate, applyUrl: result.applyUrl, sourceUrl: result.sourceUrl };
 
     const key = normalize(candidate.company, candidate.title);
     const urlKey = normalizeUrl(candidate.applyUrl);
@@ -163,10 +167,12 @@ export async function POST() {
     filteredDiversityCap: 0,
   };
 
+  const liveBoardCache: LiveBoardCache = new Map();
+
   let knownJobs = allKnown.map((j) => ({ company: j.company, title: j.title }));
   const { candidates, warning: firstWarning } = await findJobCandidates({ profile, knownJobs });
   let found = candidates.length;
-  await processCandidates(candidates, state);
+  await processCandidates(candidates, state, liveBoardCache);
 
   // If the run came back thin, keep running broadening follow-up passes
   // rather than accepting a near-empty result — real case: a narrow
@@ -191,7 +197,7 @@ export async function POST() {
     found += widenResult.candidates.length;
     lastWarning = widenResult.warning ?? lastWarning;
     const addedBefore = state.added;
-    await processCandidates(widenResult.candidates, state);
+    await processCandidates(widenResult.candidates, state, liveBoardCache);
     // Stop widening once a pass adds nothing new — the market's exhausted
     // for this run, not just thin, so further passes would just burn calls.
     if (state.added === addedBefore) break;

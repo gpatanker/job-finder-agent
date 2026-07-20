@@ -30,4 +30,20 @@ describe("looksLikeGenericCareersPage", () => {
   it("returns false (doesn't block) for an unparseable URL", () => {
     expect(looksLikeGenericCareersPage("not-a-url")).toBe(false);
   });
+
+  it("does not flag a bare /careers path carrying an ashby_jid query param (real case: emeraldai.co)", () => {
+    expect(
+      looksLikeGenericCareersPage(
+        "https://www.emeraldai.co/careers?ashby_jid=21596d2f-8ddb-4131-bd03-1d338e32e679"
+      )
+    ).toBe(false);
+  });
+
+  it("does not flag a bare careers path carrying a gh_jid query param", () => {
+    expect(looksLikeGenericCareersPage("https://acme.com/careers?gh_jid=7646422")).toBe(false);
+  });
+
+  it("still flags a bare /careers page with unrelated query params", () => {
+    expect(looksLikeGenericCareersPage("https://example.com/careers?utm_source=linkedin")).toBe(true);
+  });
 });
