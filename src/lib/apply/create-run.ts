@@ -8,8 +8,7 @@ import {
   getFieldMappingsForPlatform,
 } from "./data";
 import { detectPlatform } from "@/lib/scraping";
-import { checkCandidateUrl } from "@/lib/search/validate-candidate";
-import { findDirectSourceUrl } from "@/lib/search/find-direct-source";
+import { resolveCandidateFreshness, type LiveBoardCache } from "@/lib/search/resolve-freshness";
 
 const UNVERIFIED_REASON_TEXT: Record<string, string> = {
   closed: "the posting appears to be closed or no longer available",
@@ -42,28 +41,28 @@ export async function createAgentRun(params: {
   // architecture allows, since the actual apply run happens externally —
   // there's no server-side "right before it starts" hook to check.
   if (job.applyUrl) {
-    let check = await checkCandidateUrl(job.applyUrl, job.title);
-    if (!check.ok) {
-      const directUrl = await findDirectSourceUrl({ company: job.company, title: job.title });
-      if (directUrl) {
-        const recheck = await checkCandidateUrl(directUrl, job.title);
-        if (recheck.ok) {
-          check = recheck;
-          job.applyUrl = directUrl;
-          await db
-            .update(jobs)
-            .set({ applyUrl: directUrl, updatedAt: new Date() })
-            .where(eq(jobs.id, jobId));
-        }
-      }
-    }
-    if (!check.ok) {
-      const reasonText = UNVERIFIED_REASON_TEXT[check.reason] ?? "it failed a freshness check";
+    const liveBoardCache: LiveBoardCache = new Map();
+    const result = await resolveCandidateFreshness({
+      applyUrl: job.applyUrl,
+      sourceUrl: job.applyUrl,
+      title: job.title,
+      company: job.company,
+      liveBoardCache,
+    });
+    if (!result.ok) {
+      const reasonText = UNVERIFIED_REASON_TEXT[result.reason] ?? "it failed a freshness check";
       return {
         ok: false,
         status: 422,
         error: `Can't queue this application — ${reasonText}. Check the apply link manually before trying again.`,
       };
+    }
+    if (result.applyUrl !== job.applyUrl) {
+      job.applyUrl = result.applyUrl;
+      await db
+        .update(jobs)
+        .set({ applyUrl: result.applyUrl, updatedAt: new Date() })
+        .where(eq(jobs.id, jobId));
     }
   }
 
