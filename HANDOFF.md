@@ -2,7 +2,7 @@
 
 **Purpose:** If this conversation is lost and you're starting fresh, read this file top to bottom before doing anything else. It captures the state, decisions, and hard-won operational knowledge that aren't visible just from reading the code. Update it as things change — it's meant to stay current, not be a one-time snapshot.
 
-Last updated: 2026-07-20.
+Last updated: 2026-07-20 (evening).
 
 ---
 
@@ -61,9 +61,13 @@ These were learned the expensive way across multiple sessions. Don't rediscover 
 - **Direct-DB-script pattern** for anything the UI doesn't expose or that needs to bypass HTTP/auth: write a throwaway `.mjs` script *inside the project directory* (not the scratchpad — Node's ESM resolution needs to find `node_modules`), run with `node --env-file=.env.local ./node_modules/.bin/tsx ./script.mjs`, always end with `process.exit(0)` (the DB connection pool otherwise keeps the process alive), delete the script immediately after. **Always create these with the `Write` tool, not a Bash heredoc** — a heredoc got blocked by the "Claude Code auto mode classifier" in a past session for no clear reason; `Write` has always worked.
 - Every resolved job (submitted or blocked) gets **both** `jobs.status`/`jobs.applyAgentStatus` **and** the corresponding `agentRunQueue.status` updated together in one script — and its resume PDF deleted from `.playwright-mcp/` immediately after, so stray files don't accumulate (check `.playwright-mcp/*.pdf` for leftovers periodically; they're a sign of an incompletely-closed-out job).
 
-## Current pipeline state (as of 2026-07-20)
+## Current pipeline state (as of 2026-07-20 evening)
 
-All jobs in the pipeline are resolved — **48 applied, 14 blocked, 0 discovered/queued/pending**. No open apply-run backlog right now. Next natural step, whenever it happens, is running a fresh Search/Import pass to discover new candidates (see README's "Search / Import" section and the live-board freshness system above — this is the expensive-LLM-call part of the app, worth checking in on cost before running a big batch).
+All jobs in the pipeline are resolved — **51 applied, 15 blocked, 0 discovered/queued/pending**. No open apply-run backlog right now, and the job-search-suggestions queue (`jobSearchSuggestions.status = "new"`) is also empty — everything that was sitting there got triaged (4 promoted/applied, 1 blocked as a genuine location mismatch, 2 left untouched as stale/low-pay for the user to reconsider later; see git log around 2026-07-20 for specifics). Next natural step, whenever it happens, is running a fresh Search/Import pass to discover new candidates (see README's "Search / Import" section and the live-board freshness system above — this is the expensive-LLM-call part of the app, worth checking in on cost before running a big batch).
+
+**New pattern from this batch, worth keeping**: always freshness-check *and sanity-check the actual role* (location, comp, eligibility) before promoting a `jobSearchSuggestions` row — the search agent can return a title/company match that's real and live but still a bad fit (e.g. a "Business Operations Manager" suggestion that turned out to be Remote-UK-only for a US-based candidate). Match score alone doesn't catch this; read the live posting.
+
+**New ATS encountered**: Rippling's own hosted ATS (`ats.rippling.com/{company}/jobs/{id}`, click "Apply now" to reach `.../apply?...&step=application`). It parses the uploaded resume and autofills fields — but verify the autofilled **Location** field, it can default to the job's own location instead of the candidate's actual location and needs manual correction. Uses a Cloudflare challenge + its own `/apply` POST; confirm success via `browser_network_requests` (look for the `.../apply` POST returning 200 and the URL query changing to `step=confirmation`), same as the general "no obvious success banner" rule.
 
 ## Where to look for more
 
