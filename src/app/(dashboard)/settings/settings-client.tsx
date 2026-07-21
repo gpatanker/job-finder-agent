@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import type { CandidateProfile, ResumeProfile, StoryBankEntry } from "@/lib/db/schema";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ProfileSection } from "./profile-section";
 import { ResumeSection } from "./resume-section";
 import { StoryBankSection } from "./story-bank-section";
 
-const TABS = ["Profile", "Resume", "Story bank"] as const;
-type Tab = (typeof TABS)[number];
+const TABS = [
+  { value: "profile", label: "Profile" },
+  { value: "resume", label: "Resume" },
+  { value: "story-bank", label: "Story bank" },
+] as const;
 
 export function SettingsClient({
   profile,
@@ -18,30 +21,26 @@ export function SettingsClient({
   resume: ResumeProfile | null;
   stories: StoryBankEntry[];
 }) {
-  const [tab, setTab] = useState<Tab>("Profile");
-
   return (
-    <div className="max-w-3xl space-y-4">
-      <div className="flex gap-2 border-b border-black/10 dark:border-white/15">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-3 py-2 text-sm ${
-              tab === t
-                ? "border-b-2 border-black font-medium dark:border-white"
-                : "text-black/60 dark:text-white/60"
-            }`}
-            data-testid={`settings-tab-${t.toLowerCase().replace(/\s+/g, "-")}`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {tab === "Profile" && <ProfileSection profile={profile} />}
-      {tab === "Resume" && <ResumeSection resume={resume} />}
-      {tab === "Story bank" && <StoryBankSection stories={stories} />}
+    <div className="max-w-3xl">
+      <Tabs defaultValue="profile">
+        <TabsList>
+          {TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value} data-testid={`settings-tab-${t.value}`}>
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value="profile">
+          <ProfileSection profile={profile} />
+        </TabsContent>
+        <TabsContent value="resume">
+          <ResumeSection resume={resume} />
+        </TabsContent>
+        <TabsContent value="story-bank">
+          <StoryBankSection stories={stories} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -3,8 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { CheckCircle2, Circle, Copy, FileText, ClipboardList, Send, Ban } from "lucide-react";
 import type { ApplicationQuestion, Job } from "@/lib/db/schema";
 import { computeApplyChecklist, isChecklistComplete } from "@/lib/apply/readiness";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 function ApplyAgentCard({
   job: initialJob,
@@ -24,8 +30,7 @@ function ApplyAgentCard({
   const checklist = computeApplyChecklist(job, questions);
   const complete = isChecklistComplete(checklist);
 
-  async function toggleReviewConfirmed() {
-    const next = !job.applyReviewConfirmed;
+  async function toggleReviewConfirmed(next: boolean) {
     setJob((j) => ({ ...j, applyReviewConfirmed: next })); // optimistic; controlled checkbox would otherwise flicker back until the PATCH resolves
     try {
       const res = await fetch(`/api/jobs/${job.id}`, {
@@ -97,98 +102,130 @@ function ApplyAgentCard({
   }
 
   return (
-    <div className="rounded-lg border border-black/10 p-4 dark:border-white/15" data-testid={`apply-card-${job.id}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-medium">{job.company} — {job.title}</p>
-          <p className="text-sm text-black/60 dark:text-white/60">
-            {job.location ?? "—"} · {job.sourcePlatform ?? "—"} · Match:{" "}
-            {job.matchScore != null ? `${job.matchScore}/100` : "—"} · {job.salaryText ?? "Salary n/a"}
-          </p>
+    <Card data-testid={`apply-card-${job.id}`}>
+      <CardContent className="py-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-medium">
+              {job.company} — {job.title}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {job.location ?? "—"} · {job.sourcePlatform ?? "—"} · Match:{" "}
+              {job.matchScore != null ? `${job.matchScore}/100` : "—"} · {job.salaryText ?? "Salary n/a"}
+            </p>
+          </div>
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" asChild>
+              <a href={`/tailor/${job.id}`}>
+                <FileText className="h-3.5 w-3.5" /> Tailor
+              </a>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <a href={`/packet/${job.id}`}>
+                <ClipboardList className="h-3.5 w-3.5" /> Packet
+              </a>
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2 text-xs">
-          <a href={`/tailor/${job.id}`} className="hover:underline">Tailor</a>
-          <a href={`/packet/${job.id}`} className="hover:underline">Packet</a>
-        </div>
-      </div>
 
-      <ul className="mt-3 space-y-1 text-sm" data-testid={`checklist-${job.id}`}>
-        {checklist.map((item) => (
-          <li key={item.key} className="flex items-center gap-2">
-            <span className={item.met ? "text-green-600 dark:text-green-400" : "text-black/40 dark:text-white/40"}>
-              {item.met ? "✓" : "○"}
-            </span>
-            {item.label}
-          </li>
-        ))}
-      </ul>
+        <ul className="mt-3 space-y-1.5 text-sm" data-testid={`checklist-${job.id}`}>
+          {checklist.map((item) => (
+            <li key={item.key} className="flex items-center gap-2">
+              {item.met ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+              ) : (
+                <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              {item.label}
+            </li>
+          ))}
+        </ul>
 
-      <label className="mt-3 flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={job.applyReviewConfirmed} onChange={toggleReviewConfirmed} data-testid={`confirm-review-${job.id}`} />
-        Work authorization & salary info confirmed
-      </label>
-
-      <label className="mt-2 flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={submitAuthorized}
-          onChange={(e) => setSubmitAuthorized(e.target.checked)}
-          data-testid={`submit-authorized-${job.id}`}
-        />
-        Authorize Computer to submit after filling
-      </label>
-      <p className="ml-6 text-xs text-black/50 dark:text-white/50">
-        Leave unchecked and Computer will fill the form, then stop at the final review screen for your approval.
-        This dashboard never submits an application itself.
-      </p>
-
-      <div className="mt-3 flex flex-wrap gap-2 text-sm">
-        <button
-          onClick={loadBrief}
-          disabled={loadingBrief}
-          className="rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20"
-          data-testid={`preview-brief-${job.id}`}
-        >
-          {loadingBrief ? "Loading..." : "Preview brief"}
-        </button>
-        <button
-          onClick={handleStartRun}
-          disabled={!complete || starting}
-          className="rounded-md bg-black px-3 py-2 text-xs font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black"
-          data-testid={`start-apply-run-${job.id}`}
-          title={!complete ? "Complete the checklist above first" : undefined}
-        >
-          {starting ? "Queueing..." : "Start Apply Run"}
-        </button>
-        <button onClick={() => markStatus("ready_to_apply")} className="rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20">
-          Mark ready only
-        </button>
-        <button onClick={() => markStatus("applied", "submitted")} className="rounded-md border border-black/15 px-3 py-2 text-xs dark:border-white/20">
-          Mark submitted
-        </button>
-        <button onClick={() => markStatus("blocked", "blocked")} className="rounded-md border border-black/15 px-3 py-2 text-xs text-red-600 dark:border-white/20 dark:text-red-400">
-          Block
-        </button>
-      </div>
-
-      {!complete && (
-        <p className="mt-2 text-xs text-yellow-700 dark:text-yellow-400">
-          Missing: {checklist.filter((c) => !c.met).map((c) => c.label).join(", ")}
-        </p>
-      )}
-
-      {showBrief && brief && (
-        <div className="mt-3 space-y-2">
-          <textarea
-            readOnly
-            value={brief}
-            className="h-64 w-full rounded-md border border-black/15 bg-transparent p-2 font-mono text-xs dark:border-white/20"
-            data-testid={`brief-text-${job.id}`}
+        <div className="mt-3 flex items-center gap-2">
+          <Checkbox
+            id={`confirm-review-${job.id}`}
+            checked={job.applyReviewConfirmed}
+            onCheckedChange={(checked) => toggleReviewConfirmed(checked === true)}
+            data-testid={`confirm-review-${job.id}`}
           />
-          <button onClick={copyBrief} className="text-xs hover:underline">Copy brief</button>
+          <Label htmlFor={`confirm-review-${job.id}`} className="font-normal">
+            Work authorization & salary info confirmed
+          </Label>
         </div>
-      )}
-    </div>
+
+        <div className="mt-2 flex items-center gap-2">
+          <Checkbox
+            id={`submit-authorized-${job.id}`}
+            checked={submitAuthorized}
+            onCheckedChange={(checked) => setSubmitAuthorized(checked === true)}
+            data-testid={`submit-authorized-${job.id}`}
+          />
+          <Label htmlFor={`submit-authorized-${job.id}`} className="font-normal">
+            Authorize Computer to submit after filling
+          </Label>
+        </div>
+        <p className="ml-6 mt-1 text-xs text-muted-foreground">
+          Leave unchecked and Computer will fill the form, then stop at the final review screen for your approval.
+          This dashboard never submits an application itself.
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadBrief}
+            disabled={loadingBrief}
+            data-testid={`preview-brief-${job.id}`}
+          >
+            {loadingBrief ? "Loading..." : "Preview brief"}
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleStartRun}
+            disabled={!complete || starting}
+            data-testid={`start-apply-run-${job.id}`}
+            title={!complete ? "Complete the checklist above first" : undefined}
+          >
+            <Send className="h-3.5 w-3.5" />
+            {starting ? "Queueing..." : "Start Apply Run"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => markStatus("ready_to_apply")}>
+            Mark ready only
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => markStatus("applied", "submitted")}>
+            Mark submitted
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => markStatus("blocked", "blocked")}
+          >
+            <Ban className="h-3.5 w-3.5" /> Block
+          </Button>
+        </div>
+
+        {!complete && (
+          <p className="mt-2 text-xs text-warning">
+            Missing: {checklist.filter((c) => !c.met).map((c) => c.label).join(", ")}
+          </p>
+        )}
+
+        {showBrief && brief && (
+          <div className="mt-3 space-y-2">
+            <Textarea
+              readOnly
+              value={brief}
+              className="h-64 font-mono text-xs"
+              data-testid={`brief-text-${job.id}`}
+            />
+            <Button variant="ghost" size="sm" onClick={copyBrief}>
+              <Copy className="h-3.5 w-3.5" /> Copy brief
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -201,9 +238,14 @@ export function ApplyAgentClient({
 }) {
   if (jobs.length === 0) {
     return (
-      <p className="text-sm text-black/60 dark:text-white/60" data-testid="apply-agent-empty">
-        No jobs yet. Add one in Pipeline first.
-      </p>
+      <Card>
+        <CardContent
+          className="py-12 text-center text-sm text-muted-foreground"
+          data-testid="apply-agent-empty"
+        >
+          No jobs yet. Add one in Pipeline first.
+        </CardContent>
+      </Card>
     );
   }
 

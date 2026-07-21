@@ -2,11 +2,15 @@
 
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import type { StoryBankEntry } from "@/lib/db/schema";
 import { Modal } from "@/components/ui/modal";
-
-const inputClass =
-  "w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 
 type StoryFormValues = { slug: string; title: string; tags: string; content: string };
 
@@ -32,54 +36,46 @@ function StoryForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3" data-testid="story-form">
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Slug</label>
-        <input
-          className={inputClass}
+      <div className="space-y-1.5">
+        <Label>Slug</Label>
+        <Input
           value={values.slug}
           disabled={!isNew}
           onChange={(e) => setValues((v) => ({ ...v, slug: e.target.value }))}
           data-testid="story-form-slug"
         />
       </div>
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Title</label>
-        <input
-          className={inputClass}
+      <div className="space-y-1.5">
+        <Label>Title</Label>
+        <Input
           value={values.title}
           onChange={(e) => setValues((v) => ({ ...v, title: e.target.value }))}
           data-testid="story-form-title"
         />
       </div>
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Tags (comma-separated)</label>
-        <input
-          className={inputClass}
+      <div className="space-y-1.5">
+        <Label>Tags (comma-separated)</Label>
+        <Input
           value={values.tags}
           onChange={(e) => setValues((v) => ({ ...v, tags: e.target.value }))}
         />
       </div>
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Content</label>
-        <textarea
-          className={`${inputClass} min-h-40`}
+      <div className="space-y-1.5">
+        <Label>Content</Label>
+        <Textarea
+          className="min-h-40"
           value={values.content}
           onChange={(e) => setValues((v) => ({ ...v, content: e.target.value }))}
           data-testid="story-form-content"
         />
       </div>
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-          data-testid="story-form-submit"
-        >
+        </Button>
+        <Button type="submit" disabled={pending} data-testid="story-form-submit">
           {pending ? "Saving..." : "Save"}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -154,52 +150,53 @@ export function StoryBankSection({ stories: initialStories }: { stories: StoryBa
   }
 
   return (
-    <div className="space-y-3" data-testid="story-bank-section">
+    <div className="mt-4 space-y-3" data-testid="story-bank-section">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-black/60 dark:text-white/60">
+        <p className="text-sm text-muted-foreground">
           {stories.length} stories grounding generated answers
         </p>
-        <button
-          type="button"
-          onClick={() => setShowAdd(true)}
-          className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
-          data-testid="add-story-button"
-        >
-          Add story
-        </button>
+        <Button onClick={() => setShowAdd(true)} data-testid="add-story-button">
+          <Plus className="h-4 w-4" /> Add story
+        </Button>
       </div>
 
       <div className="space-y-2">
         {stories.map((story) => (
-          <div key={story.id} className="rounded-lg border border-black/10 p-3 dark:border-white/15" data-testid={`story-${story.id}`}>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-medium">{story.title}</p>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {story.tags.map((tag) => (
-                    <span key={tag} className="rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
-                      {tag}
-                    </span>
-                  ))}
+          <Card key={story.id} data-testid={`story-${story.id}`}>
+            <CardContent className="py-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">{story.title}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {story.tags.map((tag) => (
+                      <Badge key={tag} variant="neutral">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setEditing(story)}
+                    data-testid={`edit-story-${story.id}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDelete(story)}
+                    data-testid={`delete-story-${story.id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex shrink-0 gap-2">
-                <button onClick={() => setEditing(story)} className="text-xs hover:underline" data-testid={`edit-story-${story.id}`}>
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(story)}
-                  className="text-xs text-black/50 hover:underline dark:text-white/50"
-                  data-testid={`delete-story-${story.id}`}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-            <p className="mt-2 line-clamp-2 text-xs text-black/60 dark:text-white/60">
-              {story.content}
-            </p>
-          </div>
+              <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{story.content}</p>
+            </CardContent>
+          </Card>
         ))}
       </div>
 

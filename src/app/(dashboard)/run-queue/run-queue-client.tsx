@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Copy, ClipboardList, Bot } from "lucide-react";
 import type { AgentRunQueueItem } from "@/lib/db/schema";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const STATUS_TABS = ["all", "queued", "in_progress", "completed", "blocked", "cancelled"] as const;
 
@@ -15,12 +20,12 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-const STATUS_BADGE: Record<string, string> = {
-  queued: "bg-black/5 dark:bg-white/10",
-  in_progress: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  completed: "bg-green-500/15 text-green-700 dark:text-green-400",
-  blocked: "bg-red-500/15 text-red-700 dark:text-red-400",
-  cancelled: "bg-black/5 text-black/50 dark:bg-white/10 dark:text-white/50",
+const STATUS_VARIANTS: Record<string, NonNullable<BadgeProps["variant"]>> = {
+  queued: "neutral",
+  in_progress: "info",
+  completed: "success",
+  blocked: "danger",
+  cancelled: "neutral",
 };
 
 function RunCard({
@@ -36,49 +41,86 @@ function RunCard({
   }
 
   return (
-    <div className="rounded-lg border border-black/10 p-4 dark:border-white/15" data-testid={`run-${run.id}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-medium">{run.companySnapshot} — {run.titleSnapshot}</p>
-          <p className="text-xs text-black/50 dark:text-white/50">
-            Created {new Date(run.createdAt).toLocaleString()} · {run.submitAuthorized ? "Submit authorized" : "Fill only, no submit"}
-          </p>
+    <Card data-testid={`run-${run.id}`}>
+      <CardContent className="py-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-medium">
+              {run.companySnapshot} — {run.titleSnapshot}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Created {new Date(run.createdAt).toLocaleString()} ·{" "}
+              {run.submitAuthorized ? "Submit authorized" : "Fill only, no submit"}
+            </p>
+          </div>
+          <Badge variant={STATUS_VARIANTS[run.status] ?? "neutral"}>
+            {STATUS_LABELS[run.status] ?? run.status}
+          </Badge>
         </div>
-        <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_BADGE[run.status] ?? ""}`}>
-          {STATUS_LABELS[run.status] ?? run.status}
-        </span>
-      </div>
 
-      <p className="mt-2 line-clamp-3 whitespace-pre-wrap font-mono text-xs text-black/60 dark:text-white/60">
-        {run.brief}
-      </p>
+        <p className="mt-2 line-clamp-3 whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+          {run.brief}
+        </p>
 
-      <div className="mt-3 flex flex-wrap gap-3 text-xs">
-        <button onClick={copyBrief} className="hover:underline">Copy brief</button>
-        <a href={`/packet/${run.jobId}`} className="hover:underline">Open packet</a>
-        <a href={`/apply-agent`} className="hover:underline">Open apply agent</a>
-        {run.status === "queued" && (
-          <button onClick={() => onUpdate(run.id, "in_progress")} className="hover:underline" data-testid={`mark-in-progress-${run.id}`}>
-            Mark in progress
-          </button>
-        )}
-        {run.status === "in_progress" && (
-          <button onClick={() => onUpdate(run.id, "completed")} className="text-green-700 hover:underline dark:text-green-400" data-testid={`mark-completed-${run.id}`}>
-            Mark completed
-          </button>
-        )}
-        {(run.status === "queued" || run.status === "in_progress") && (
-          <>
-            <button onClick={() => onUpdate(run.id, "blocked")} className="text-red-600 hover:underline dark:text-red-400" data-testid={`mark-blocked-${run.id}`}>
-              Mark blocked
-            </button>
-            <button onClick={() => onUpdate(run.id, "cancelled")} className="text-black/50 hover:underline dark:text-white/50" data-testid={`cancel-run-${run.id}`}>
-              Cancel
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+        <div className="mt-3 flex flex-wrap items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={copyBrief}>
+            <Copy className="h-3.5 w-3.5" /> Copy brief
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <a href={`/packet/${run.jobId}`}>
+              <ClipboardList className="h-3.5 w-3.5" /> Open packet
+            </a>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <a href="/apply-agent">
+              <Bot className="h-3.5 w-3.5" /> Open apply agent
+            </a>
+          </Button>
+          {run.status === "queued" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onUpdate(run.id, "in_progress")}
+              data-testid={`mark-in-progress-${run.id}`}
+            >
+              Mark in progress
+            </Button>
+          )}
+          {run.status === "in_progress" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-success hover:text-success"
+              onClick={() => onUpdate(run.id, "completed")}
+              data-testid={`mark-completed-${run.id}`}
+            >
+              Mark completed
+            </Button>
+          )}
+          {(run.status === "queued" || run.status === "in_progress") && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => onUpdate(run.id, "blocked")}
+                data-testid={`mark-blocked-${run.id}`}
+              >
+                Mark blocked
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onUpdate(run.id, "cancelled")}
+                data-testid={`cancel-run-${run.id}`}
+              >
+                Cancel
+              </Button>
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -109,25 +151,25 @@ export function RunQueueClient({ initialRuns }: { initialRuns: AgentRunQueueItem
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {STATUS_TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-full px-3 py-1 text-xs ${
-              tab === t ? "bg-black text-white dark:bg-white dark:text-black" : "bg-black/5 dark:bg-white/10"
-            }`}
-            data-testid={`run-queue-tab-${t}`}
-          >
-            {STATUS_LABELS[t]}
-          </button>
-        ))}
-      </div>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as (typeof STATUS_TABS)[number])}>
+        <TabsList className="h-auto flex-wrap">
+          {STATUS_TABS.map((t) => (
+            <TabsTrigger key={t} value={t} data-testid={`run-queue-tab-${t}`}>
+              {STATUS_LABELS[t]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {filtered.length === 0 ? (
-        <p className="text-sm text-black/60 dark:text-white/60" data-testid="run-queue-empty">
-          Computer reads from this queue when you ask me to run queued applications.
-        </p>
+        <Card>
+          <CardContent
+            className="py-12 text-center text-sm text-muted-foreground"
+            data-testid="run-queue-empty"
+          >
+            Computer reads from this queue when you ask me to run queued applications.
+          </CardContent>
+        </Card>
       ) : (
         <div className="flex flex-col gap-3">
           {filtered.map((run) => (

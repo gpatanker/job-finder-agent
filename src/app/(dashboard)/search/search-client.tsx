@@ -2,7 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { Search, Sparkles, ExternalLink, Check, X } from "lucide-react";
 import type { JobSearchSuggestion } from "@/lib/db/schema";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 
 export function SearchClient({
   initialSuggestions,
@@ -126,101 +132,100 @@ export function SearchClient({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        <button
-          onClick={handleRun}
-          disabled={running}
-          className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-          data-testid="run-search-button"
-        >
+        <Button onClick={handleRun} disabled={running} data-testid="run-search-button">
+          <Search className="h-4 w-4" />
           {running ? "Searching..." : "Find matching roles"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="secondary"
           onClick={handleClean}
           disabled={cleaning || suggestions.length === 0}
-          className="rounded-md bg-black/5 px-3 py-2 text-sm font-medium disabled:opacity-50 dark:bg-white/10"
           data-testid="clean-suggestions-button"
           title="Re-check every suggestion for closed/stale/blocked links and remove anything that no longer holds up"
         >
           {cleaning ? "Cleaning..." : "Clean up suggestions"}
-        </button>
+        </Button>
       </div>
 
-      <form
-        onSubmit={handleScoreUrl}
-        className="flex flex-col gap-2 rounded-lg border border-black/10 p-3 dark:border-white/15 sm:flex-row sm:items-center"
-      >
-        <label className="text-sm font-medium sm:sr-only" htmlFor="score-url-input">
-          Check a specific job posting
-        </label>
-        <input
-          id="score-url-input"
-          type="url"
-          required
-          placeholder="Paste a job posting URL to check your fit"
-          value={urlInput}
-          onChange={(e) => setUrlInput(e.target.value)}
-          className="w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50"
-          data-testid="score-url-input"
-        />
-        <button
-          type="submit"
-          disabled={scoring}
-          className="whitespace-nowrap rounded-md bg-black/5 px-3 py-2 text-sm font-medium disabled:opacity-50 dark:bg-white/10"
-          data-testid="score-url-button"
-        >
-          {scoring ? "Checking..." : "Check fit"}
-        </button>
-      </form>
+      <Card>
+        <CardContent className="py-3">
+          <form onSubmit={handleScoreUrl} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Label className="sr-only" htmlFor="score-url-input">
+              Check a specific job posting
+            </Label>
+            <Input
+              id="score-url-input"
+              type="url"
+              required
+              placeholder="Paste a job posting URL to check your fit"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              data-testid="score-url-input"
+            />
+            <Button type="submit" variant="secondary" disabled={scoring} data-testid="score-url-button">
+              <Sparkles className="h-4 w-4" />
+              {scoring ? "Checking..." : "Check fit"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       {suggestions.length === 0 ? (
-        <p className="text-sm text-black/60 dark:text-white/60" data-testid="search-empty">
-          No suggestions yet. Click &ldquo;Find matching roles&rdquo; to search.
-        </p>
+        <Card>
+          <CardContent
+            className="py-12 text-center text-sm text-muted-foreground"
+            data-testid="search-empty"
+          >
+            No suggestions yet. Click &ldquo;Find matching roles&rdquo; to search.
+          </CardContent>
+        </Card>
       ) : (
         <div className="flex flex-col gap-3">
           {suggestions.map((s) => (
-            <div
-              key={s.id}
-              className="rounded-lg border border-black/10 p-4 dark:border-white/15"
-              data-testid={`suggestion-${s.id}`}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium">{s.company} — {s.title}</p>
-                  <p className="text-sm text-black/60 dark:text-white/60">
-                    {s.location ?? "—"} {s.workMode ? `(${s.workMode})` : ""} · {s.salaryText ?? "Salary n/a"}
-                  </p>
+            <Card key={s.id} data-testid={`suggestion-${s.id}`}>
+              <CardContent className="py-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium">
+                      {s.company} — {s.title}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {s.location ?? "—"} {s.workMode ? `(${s.workMode})` : ""} · {s.salaryText ?? "Salary n/a"}
+                    </p>
+                  </div>
+                  <Badge variant="info">Match: {s.matchScore ?? "—"}/100</Badge>
                 </div>
-                <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
-                  Match: {s.matchScore ?? "—"}/100
-                </span>
-              </div>
-              {s.rationale && (
-                <p className="mt-2 text-sm text-black/70 dark:text-white/70">{s.rationale}</p>
-              )}
-              <div className="mt-3 flex flex-wrap gap-3 text-xs">
-                {s.applyUrl && (
-                  <a href={s.applyUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                    Apply link
-                  </a>
-                )}
-                {s.sourceUrl && (
-                  <a href={s.sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                    Source
-                  </a>
-                )}
-                <button
-                  onClick={() => handlePromote(s.id)}
-                  className="text-green-700 hover:underline dark:text-green-400"
-                  data-testid={`promote-${s.id}`}
-                >
-                  Promote to pipeline
-                </button>
-                <button onClick={() => handleDismiss(s.id)} className="text-black/50 hover:underline dark:text-white/50">
-                  Dismiss
-                </button>
-              </div>
-            </div>
+                {s.rationale && <p className="mt-2 text-sm text-muted-foreground">{s.rationale}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-1">
+                  {s.applyUrl && (
+                    <Button variant="ghost" size="sm" asChild>
+                      <a href={s.applyUrl} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3.5 w-3.5" /> Apply link
+                      </a>
+                    </Button>
+                  )}
+                  {s.sourceUrl && (
+                    <Button variant="ghost" size="sm" asChild>
+                      <a href={s.sourceUrl} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3.5 w-3.5" /> Source
+                      </a>
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-success hover:text-success"
+                    onClick={() => handlePromote(s.id)}
+                    data-testid={`promote-${s.id}`}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Promote to pipeline
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDismiss(s.id)}>
+                    <X className="h-3.5 w-3.5" /> Dismiss
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}

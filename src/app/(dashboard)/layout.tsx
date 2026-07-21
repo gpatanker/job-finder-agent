@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
+import { Briefcase, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { SidebarNav } from "@/components/sidebar-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 async function signOut() {
   "use server";
@@ -20,26 +24,38 @@ export default async function DashboardLayout({
   } = await supabase.auth.getUser();
 
   return (
-    <div className="flex flex-1">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-black/10 p-4 dark:border-white/15">
-        <div className="mb-6">
-          <p className="text-sm font-semibold">Job Finder Agent</p>
-          <p className="truncate text-xs text-black/50 dark:text-white/50">
-            {user?.email}
-          </p>
+    <div className="flex flex-1 bg-background">
+      <aside className="flex w-64 shrink-0 flex-col border-r border-border p-4">
+        <div className="mb-4 flex items-center gap-2.5 px-1">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Briefcase className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">Job Finder Agent</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {user?.email}
+            </p>
+          </div>
         </div>
         <SidebarNav />
-        <form action={signOut} className="mt-auto pt-4">
-          <button
-            type="submit"
-            className="w-full rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
-            data-testid="sign-out"
-          >
-            Sign out
-          </button>
-        </form>
+        <div className="mt-auto flex flex-col gap-2 pt-4">
+          <Separator />
+          <ThemeToggle />
+          <form action={signOut}>
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              className="w-full justify-start gap-2"
+              data-testid="sign-out"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </Button>
+          </form>
+        </div>
       </aside>
-      <div className="flex flex-1 flex-col">{children}</div>
+      <div className="flex flex-1 flex-col overflow-x-hidden">{children}</div>
     </div>
   );
 }

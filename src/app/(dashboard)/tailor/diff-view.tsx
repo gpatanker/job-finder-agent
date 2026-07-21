@@ -14,9 +14,7 @@ export function DiffView({
   return (
     <div className="space-y-4" data-testid="diff-view">
       {plan.rationale && (
-        <p className="rounded-md bg-black/[0.03] p-3 text-sm dark:bg-white/[0.05]">
-          {plan.rationale}
-        </p>
+        <p className="rounded-md bg-secondary/60 p-3 text-sm">{plan.rationale}</p>
       )}
 
       {tailored.experience.map((exp, expIndex) => {
@@ -24,7 +22,7 @@ export function DiffView({
         const baseOrder = baseExp.bullets.map((b) => b.id);
 
         return (
-          <div key={exp.company} className="rounded-lg border border-black/10 p-3 dark:border-white/15">
+          <div key={exp.company} className="rounded-lg border border-border p-3">
             <p className="text-sm font-medium">{exp.company}</p>
             <ol className="mt-2 space-y-2 text-sm">
               {exp.bullets.map((bullet, newIndex) => {
@@ -34,17 +32,15 @@ export function DiffView({
                 const textChanged = baseBullet && baseBullet.text !== bullet.text;
 
                 return (
-                  <li key={bullet.id} className="border-l-2 border-black/10 pl-3 dark:border-white/15">
-                    <div className="flex items-center gap-2 text-xs text-black/50 dark:text-white/50">
+                  <li key={bullet.id} className="border-l-2 border-border pl-3">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>#{newIndex + 1}</span>
                       {moved && <span>(was #{originalIndex + 1})</span>}
                     </div>
                     {textChanged && baseBullet ? (
                       <>
-                        <p className="text-black/40 line-through dark:text-white/40">
-                          {baseBullet.text}
-                        </p>
-                        <p>{bullet.text}</p>
+                        <p className="text-destructive/70 line-through">{baseBullet.text}</p>
+                        <p className="text-success">{bullet.text}</p>
                       </>
                     ) : (
                       <p>{bullet.text}</p>
@@ -57,9 +53,9 @@ export function DiffView({
         );
       })}
 
-      <div className="rounded-lg border border-black/10 p-3 dark:border-white/15">
+      <div className="rounded-lg border border-border p-3">
         <p className="text-sm font-medium">Skills order</p>
-        <p className="mt-1 text-sm text-black/70 dark:text-white/70">
+        <p className="mt-1 text-sm text-muted-foreground">
           {tailored.skills.map((s) => s.category).join(" → ")}
         </p>
       </div>

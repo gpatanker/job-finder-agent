@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
+import { FileText } from "lucide-react";
 import { db } from "@/lib/db/client";
 import { jobs } from "@/lib/db/schema";
+import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default async function TailorIndexPage() {
   const allJobs = await db
@@ -12,37 +16,46 @@ export default async function TailorIndexPage() {
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-6">
-      <h1 className="text-lg font-semibold">Resume Tailor</h1>
+      <PageHeader
+        title="Resume Tailor"
+        description="Generate a role-tailored resume PDF for any job in your pipeline."
+      />
 
       {allJobs.length === 0 ? (
-        <p className="text-sm text-black/60 dark:text-white/60" data-testid="tailor-empty">
-          No jobs yet. Add one in Pipeline first.
-        </p>
+        <Card>
+          <CardContent
+            className="py-12 text-center text-sm text-muted-foreground"
+            data-testid="tailor-empty"
+          >
+            No jobs yet. Add one in Pipeline first.
+          </CardContent>
+        </Card>
       ) : (
-        <div className="divide-y divide-black/10 rounded-lg border border-black/10 dark:divide-white/10 dark:border-white/15">
-          {allJobs.map((job) => (
-            <Link
-              key={job.id}
-              href={`/tailor/${job.id}`}
-              className="flex items-center justify-between px-4 py-3 text-sm hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
-              data-testid={`tailor-link-${job.id}`}
-            >
-              <div>
-                <p className="font-medium">{job.company}</p>
-                <p className="text-black/60 dark:text-white/60">{job.title}</p>
-              </div>
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs ${
-                  job.tailoredResumeSlug
-                    ? "bg-green-500/15 text-green-700 dark:text-green-400"
-                    : "bg-black/5 dark:bg-white/10"
-                }`}
+        <Card className="overflow-hidden py-0">
+          <div className="divide-y divide-border">
+            {allJobs.map((job) => (
+              <Link
+                key={job.id}
+                href={`/tailor/${job.id}`}
+                className="flex items-center justify-between gap-3 px-4 py-3 text-sm transition-colors hover:bg-secondary/40"
+                data-testid={`tailor-link-${job.id}`}
               >
-                {job.tailoredResumeSlug ? "Resume ready" : "Not generated"}
-              </span>
-            </Link>
-          ))}
-        </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="font-medium">{job.company}</p>
+                    <p className="text-muted-foreground">{job.title}</p>
+                  </div>
+                </div>
+                <Badge variant={job.tailoredResumeSlug ? "success" : "neutral"}>
+                  {job.tailoredResumeSlug ? "Resume ready" : "Not generated"}
+                </Badge>
+              </Link>
+            ))}
+          </div>
+        </Card>
       )}
     </main>
   );

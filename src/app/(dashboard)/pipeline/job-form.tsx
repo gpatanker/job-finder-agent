@@ -2,6 +2,17 @@
 
 import { useState, type FormEvent } from "react";
 import { WORK_MODES } from "@/lib/pipeline/constants";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type JobFormValues = {
   company: string;
@@ -37,19 +48,18 @@ export const EMPTY_JOB_FORM_VALUES: JobFormValues = {
   resumeAngle: "",
 };
 
-const inputClass =
-  "w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50";
-
 function Field({
   label,
+  htmlFor,
   children,
 }: {
   label: string;
+  htmlFor?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1">
-      <label className="text-sm font-medium">{label}</label>
+    <div className="space-y-1.5">
+      <Label htmlFor={htmlFor}>{label}</Label>
       {children}
     </div>
   );
@@ -83,8 +93,7 @@ export function JobForm({
     <form onSubmit={handleSubmit} className="space-y-4" data-testid="job-form">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Company *">
-          <input
-            className={inputClass}
+          <Input
             required
             value={values.company}
             onChange={(e) => set("company", e.target.value)}
@@ -92,8 +101,7 @@ export function JobForm({
           />
         </Field>
         <Field label="Title *">
-          <input
-            className={inputClass}
+          <Input
             required
             value={values.title}
             onChange={(e) => set("title", e.target.value)}
@@ -101,70 +109,63 @@ export function JobForm({
           />
         </Field>
         <Field label="Team">
-          <input
-            className={inputClass}
-            value={values.team}
-            onChange={(e) => set("team", e.target.value)}
-          />
+          <Input value={values.team} onChange={(e) => set("team", e.target.value)} />
         </Field>
         <Field label="Location">
-          <input
-            className={inputClass}
+          <Input
             value={values.location}
             onChange={(e) => set("location", e.target.value)}
           />
         </Field>
         <Field label="Work mode">
-          <select
-            className={inputClass}
-            value={values.workMode}
-            onChange={(e) => set("workMode", e.target.value)}
+          <Select
+            value={values.workMode || undefined}
+            onValueChange={(v) => set("workMode", v)}
           >
-            <option value="">—</option>
-            {WORK_MODES.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger>
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
+            <SelectContent>
+              {WORK_MODES.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Source / platform">
-          <input
-            className={inputClass}
+          <Input
             placeholder="Greenhouse, Ashby, LinkedIn..."
             value={values.sourcePlatform}
             onChange={(e) => set("sourcePlatform", e.target.value)}
           />
         </Field>
         <Field label="Match score (0-100)">
-          <input
+          <Input
             type="number"
             min={0}
             max={100}
-            className={inputClass}
             value={values.matchScore}
             onChange={(e) => set("matchScore", e.target.value)}
           />
         </Field>
         <Field label="Role family">
-          <input
-            className={inputClass}
+          <Input
             value={values.roleFamily}
             onChange={(e) => set("roleFamily", e.target.value)}
           />
         </Field>
         <Field label="Salary min">
-          <input
+          <Input
             type="number"
-            className={inputClass}
             value={values.salaryMin}
             onChange={(e) => set("salaryMin", e.target.value)}
           />
         </Field>
         <Field label="Salary max">
-          <input
+          <Input
             type="number"
-            className={inputClass}
             value={values.salaryMax}
             onChange={(e) => set("salaryMax", e.target.value)}
           />
@@ -172,8 +173,7 @@ export function JobForm({
       </div>
 
       <Field label="Salary text (fallback if no min/max)">
-        <input
-          className={inputClass}
+        <Input
           placeholder="$140k-$180k + equity"
           value={values.salaryText}
           onChange={(e) => set("salaryText", e.target.value)}
@@ -181,9 +181,8 @@ export function JobForm({
       </Field>
 
       <Field label="Apply URL">
-        <input
+        <Input
           type="url"
-          className={inputClass}
           placeholder="https://..."
           value={values.applyUrl}
           onChange={(e) => set("applyUrl", e.target.value)}
@@ -192,8 +191,7 @@ export function JobForm({
       </Field>
 
       <Field label="Resume angle">
-        <input
-          className={inputClass}
+        <Input
           placeholder="Emphasize GPU infra + vendor negotiation"
           value={values.resumeAngle}
           onChange={(e) => set("resumeAngle", e.target.value)}
@@ -201,29 +199,20 @@ export function JobForm({
       </Field>
 
       <Field label="Job description">
-        <textarea
-          className={`${inputClass} min-h-24`}
+        <Textarea
+          className="min-h-24"
           value={values.jobDescription}
           onChange={(e) => set("jobDescription", e.target.value)}
         />
       </Field>
 
       <div className="flex justify-end gap-2 pt-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
-        >
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-          data-testid="job-form-submit"
-        >
+        </Button>
+        <Button type="submit" disabled={pending} data-testid="job-form-submit">
           {pending ? "Saving..." : submitLabel}
-        </button>
+        </Button>
       </div>
     </form>
   );

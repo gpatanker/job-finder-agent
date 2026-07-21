@@ -2,7 +2,12 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { Briefcase } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,65 +40,57 @@ export default function LoginPage() {
 
   return (
     <main className="flex flex-1 items-center justify-center p-6">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded-lg border border-black/10 p-6 dark:border-white/15"
-        data-testid="login-form"
-      >
-        <div>
-          <h1 className="text-lg font-semibold">Job Finder Agent</h1>
-          <p className="text-sm text-black/60 dark:text-white/60">
-            Sign in to your dashboard.
-          </p>
-        </div>
+      <Card className="w-full max-w-sm">
+        <CardContent className="py-6">
+          <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Briefcase className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold">Job Finder Agent</h1>
+                <p className="text-sm text-muted-foreground">Sign in to your dashboard.</p>
+              </div>
+            </div>
 
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50"
-            data-testid="login-email"
-          />
-        </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                data-testid="login-email"
+              />
+            </div>
 
-        <div className="space-y-1">
-          <label htmlFor="password" className="text-sm font-medium">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50"
-            data-testid="login-password"
-          />
-        </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                data-testid="login-password"
+              />
+            </div>
 
-        {error && (
-          <p className="text-sm text-red-600 dark:text-red-400" data-testid="login-error">
-            {error}
-          </p>
-        )}
+            {error && (
+              <p className="text-sm text-destructive" data-testid="login-error">
+                {error}
+              </p>
+            )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-          data-testid="login-submit"
-        >
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-      </form>
+            <Button type="submit" disabled={loading} className="w-full" data-testid="login-submit">
+              {loading ? "Signing in..." : "Sign in"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </main>
   );
 }

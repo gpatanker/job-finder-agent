@@ -3,20 +3,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Copy, Sparkles, Check, Trash2, ScanLine, Plus } from "lucide-react";
 import type { ApplicationQuestion, Job } from "@/lib/db/schema";
 import { QUESTION_STATUS_LABELS } from "@/lib/packet/constants";
 import { computePacketReadiness, PACKET_READINESS_COPY } from "@/lib/packet/readiness";
 import { Modal } from "@/components/ui/modal";
+import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 
-const TONE_CLASSES: Record<string, string> = {
-  caution: "bg-black/5 dark:bg-white/10",
-  ok: "bg-black/5 dark:bg-white/10",
-  warn: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400",
-  ready: "bg-green-500/15 text-green-700 dark:text-green-400",
+const TONE_VARIANTS: Record<string, NonNullable<BadgeProps["variant"]>> = {
+  caution: "neutral",
+  ok: "neutral",
+  warn: "warning",
+  ready: "success",
 };
-
-const inputClass =
-  "w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50";
 
 function QuestionCard({
   question,
@@ -62,45 +65,64 @@ function QuestionCard({
   }
 
   return (
-    <div className="rounded-lg border border-black/10 p-3 dark:border-white/15" data-testid={`question-${question.id}`}>
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium">{question.prompt}</p>
-        <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
-          {QUESTION_STATUS_LABELS[question.status as keyof typeof QUESTION_STATUS_LABELS] ?? question.status}
-        </span>
-      </div>
-      <textarea
-        className={`${inputClass} mt-2 min-h-20`}
-        value={answer}
-        onChange={(e) => setAnswer(e.target.value)}
-        data-testid={`answer-${question.id}`}
-      />
-      <div className="mt-2 flex flex-wrap gap-3 text-xs">
-        <button onClick={handleGenerate} disabled={generating} className="hover:underline" data-testid={`generate-answer-${question.id}`}>
-          {generating ? "Generating..." : "Generate answer from story bank"}
-        </button>
-        {dirty && (
-          <button onClick={saveAnswer} disabled={saving} className="hover:underline" data-testid={`save-answer-${question.id}`}>
-            {saving ? "Saving..." : "Save answer"}
-          </button>
-        )}
-        {question.status !== "approved" && answer.trim() && (
+    <Card data-testid={`question-${question.id}`}>
+      <CardContent className="space-y-2 py-4">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium">{question.prompt}</p>
+          <Badge variant="neutral" className="shrink-0">
+            {QUESTION_STATUS_LABELS[question.status as keyof typeof QUESTION_STATUS_LABELS] ?? question.status}
+          </Badge>
+        </div>
+        <Textarea
+          className="min-h-20"
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          data-testid={`answer-${question.id}`}
+        />
+        <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
           <button
-            onClick={() => onUpdate(question.id, { status: "approved" })}
-            className="text-green-700 hover:underline dark:text-green-400"
-            data-testid={`approve-question-${question.id}`}
+            onClick={handleGenerate}
+            disabled={generating}
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
+            data-testid={`generate-answer-${question.id}`}
           >
-            Approve
+            <Sparkles className="h-3.5 w-3.5" />
+            {generating ? "Generating..." : "Generate answer from story bank"}
           </button>
-        )}
-        <button onClick={copyAnswer} className="hover:underline">
-          Copy answer
-        </button>
-        <button onClick={() => onDelete(question.id)} className="text-black/50 hover:underline dark:text-white/50">
-          Delete
-        </button>
-      </div>
-    </div>
+          {dirty && (
+            <button
+              onClick={saveAnswer}
+              disabled={saving}
+              className="text-muted-foreground hover:text-foreground hover:underline"
+              data-testid={`save-answer-${question.id}`}
+            >
+              {saving ? "Saving..." : "Save answer"}
+            </button>
+          )}
+          {question.status !== "approved" && answer.trim() && (
+            <button
+              onClick={() => onUpdate(question.id, { status: "approved" })}
+              className="inline-flex items-center gap-1 text-success hover:underline"
+              data-testid={`approve-question-${question.id}`}
+            >
+              <Check className="h-3.5 w-3.5" /> Approve
+            </button>
+          )}
+          <button
+            onClick={copyAnswer}
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
+          >
+            <Copy className="h-3.5 w-3.5" /> Copy answer
+          </button>
+          <button
+            onClick={() => onDelete(question.id)}
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-destructive hover:underline"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -210,56 +232,64 @@ export function PacketClient({
 
   return (
     <div className="max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold">
-          {job.company} — {job.title}
-        </h1>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-          <span className={`rounded-full px-2 py-0.5 text-xs ${TONE_CLASSES[copy.tone]}`} data-testid="packet-readiness">
-            {copy.label}
+      <PageHeader
+        title={`${job.company} — ${job.title}`}
+        description={
+          <span className="flex flex-wrap items-center gap-2">
+            <Badge variant={TONE_VARIANTS[copy.tone] ?? "neutral"} data-testid="packet-readiness">
+              {copy.label}
+            </Badge>
+            {job.tailoredResumeSlug ? (
+              <a
+                href={`/api/resumes/${job.tailoredResumeSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm hover:underline"
+              >
+                Tailored resume ready
+              </a>
+            ) : (
+              <a href={`/tailor/${job.id}`} className="text-sm hover:underline">
+                No resume yet — tailor it
+              </a>
+            )}
+            {job.applyUrl && (
+              <a
+                href={job.applyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm hover:underline"
+              >
+                Open apply link
+              </a>
+            )}
           </span>
-          {job.tailoredResumeSlug ? (
-            <a href={`/api/resumes/${job.tailoredResumeSlug}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
-              Tailored resume ready
-            </a>
-          ) : (
-            <a href={`/tailor/${job.id}`} className="hover:underline">
-              No resume yet — tailor it
-            </a>
-          )}
-          {job.applyUrl && (
-            <a href={job.applyUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
-              Open apply link
-            </a>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       <div className="flex flex-wrap gap-3">
-        <button
+        <Button
           onClick={handleScrape}
           disabled={scanning || !job.applyUrl}
-          className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
           data-testid="scrape-prompts-button"
           title={!job.applyUrl ? "Add an apply URL first" : undefined}
         >
+          <ScanLine className="h-4 w-4" />
           {scanning ? "Scraping..." : "Scrape prompts"}
-        </button>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20"
-          data-testid="add-prompt-button"
-        >
+        </Button>
+        <Button variant="outline" onClick={() => setShowAdd(true)} data-testid="add-prompt-button">
+          <Plus className="h-4 w-4" />
           Add prompt manually
-        </button>
+        </Button>
         {questions.length > 0 && (
-          <button onClick={copyAll} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
+          <Button variant="outline" onClick={copyAll}>
+            <Copy className="h-4 w-4" />
             Copy all answers
-          </button>
+          </Button>
         )}
       </div>
 
-      <p className="text-xs text-black/50 dark:text-white/50">
+      <p className="text-xs text-muted-foreground">
         Scraping may miss hidden, multi-step, auth-gated, or anti-bot forms — always double-check against the real application.
       </p>
 
@@ -272,24 +302,20 @@ export function PacketClient({
       {showAdd && (
         <Modal title="Add prompt" onClose={() => setShowAdd(false)}>
           <div className="space-y-3">
-            <textarea
-              className={`${inputClass} min-h-24`}
+            <Textarea
+              className="min-h-24"
               placeholder="Paste the application question..."
               value={newPrompt}
               onChange={(e) => setNewPrompt(e.target.value)}
               data-testid="new-prompt-input"
             />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowAdd(false)} className="rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20">
+              <Button variant="outline" onClick={() => setShowAdd(false)}>
                 Cancel
-              </button>
-              <button
-                onClick={handleAddPrompt}
-                className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
-                data-testid="submit-new-prompt"
-              >
+              </Button>
+              <Button onClick={handleAddPrompt} data-testid="submit-new-prompt">
                 Add
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>

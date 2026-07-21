@@ -2,10 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { Plus, X } from "lucide-react";
 import type { CandidateProfile, EducationEntry } from "@/lib/db/schema";
-
-const inputClass =
-  "w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 function toCsv(items: string[]) {
   return items.join(", ");
@@ -15,6 +18,25 @@ function fromCsv(value: string) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function Field({
+  label,
+  children,
+  htmlFor,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  htmlFor?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`space-y-1.5 ${className ?? ""}`}>
+      <Label htmlFor={htmlFor}>{label}</Label>
+      {children}
+    </div>
+  );
 }
 
 export function ProfileSection({ profile }: { profile: CandidateProfile | null }) {
@@ -135,244 +157,198 @@ export function ProfileSection({ profile }: { profile: CandidateProfile | null }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" data-testid="profile-form">
+    <form onSubmit={handleSubmit} className="mt-4 space-y-4" data-testid="profile-form">
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Name</label>
-          <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} data-testid="profile-name" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Email</label>
-          <input className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Phone</label>
-          <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">LinkedIn</label>
-          <input className={inputClass} value={linkedin} onChange={(e) => setLinkedin(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Location</label>
-          <input className={inputClass} value={location} onChange={(e) => setLocation(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Current company</label>
-          <input className={inputClass} value={currentCompany} onChange={(e) => setCurrentCompany(e.target.value)} />
-        </div>
+        <Field label="Name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} data-testid="profile-name" />
+        </Field>
+        <Field label="Email">
+          <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+        <Field label="Phone">
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Field label="LinkedIn">
+          <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} />
+        </Field>
+        <Field label="Location">
+          <Input value={location} onChange={(e) => setLocation(e.target.value)} />
+        </Field>
+        <Field label="Current company">
+          <Input value={currentCompany} onChange={(e) => setCurrentCompany(e.target.value)} />
+        </Field>
       </div>
 
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Function tags (comma-separated)</label>
-        <input className={inputClass} value={functionTags} onChange={(e) => setFunctionTags(e.target.value)} />
-      </div>
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Preferred industries (comma-separated)</label>
-        <input className={inputClass} value={preferredIndustries} onChange={(e) => setPreferredIndustries(e.target.value)} />
-      </div>
+      <Field label="Function tags (comma-separated)">
+        <Input value={functionTags} onChange={(e) => setFunctionTags(e.target.value)} />
+      </Field>
+      <Field label="Preferred industries (comma-separated)">
+        <Input value={preferredIndustries} onChange={(e) => setPreferredIndustries(e.target.value)} />
+      </Field>
 
       <div className="flex gap-6">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="work-authorized"
             checked={workAuthorized}
-            onChange={(e) => setWorkAuthorized(e.target.checked)}
+            onCheckedChange={(checked) => setWorkAuthorized(checked === true)}
           />
-          Legally authorized to work in the US
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
+          <Label htmlFor="work-authorized" className="font-normal">
+            Legally authorized to work in the US
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="requires-sponsorship"
             checked={requiresSponsorship}
-            onChange={(e) => setRequiresSponsorship(e.target.checked)}
+            onCheckedChange={(checked) => setRequiresSponsorship(checked === true)}
           />
-          Requires visa sponsorship now/future
-        </label>
-      </div>
-
-      <div className="rounded-lg border border-black/10 p-3 dark:border-white/15">
-        <p className="mb-1 text-sm font-medium">Optional self-identification</p>
-        <p className="mb-2 text-xs text-black/60 dark:text-white/60">
-          Used only to answer EEO/demographic questions during application review — never
-          scraped or guessed. Leave any field blank to have the Apply Run Brief tell the
-          automation to select &ldquo;decline to answer&rdquo; for it instead.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Gender identity</label>
-            <input
-              className={inputClass}
-              value={genderIdentity}
-              onChange={(e) => setGenderIdentity(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Race / ethnicity</label>
-            <input
-              className={inputClass}
-              value={raceEthnicity}
-              onChange={(e) => setRaceEthnicity(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Sexual orientation</label>
-            <input
-              className={inputClass}
-              value={sexualOrientation}
-              onChange={(e) => setSexualOrientation(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Veteran status</label>
-            <input
-              className={inputClass}
-              value={veteranStatus}
-              onChange={(e) => setVeteranStatus(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Disability status</label>
-            <input
-              className={inputClass}
-              value={disabilityStatus}
-              onChange={(e) => setDisabilityStatus(e.target.value)}
-            />
-          </div>
+          <Label htmlFor="requires-sponsorship" className="font-normal">
+            Requires visa sponsorship now/future
+          </Label>
         </div>
       </div>
 
-      <div className="rounded-lg border border-black/10 p-3 dark:border-white/15">
-        <p className="mb-1 text-sm font-medium">Common application fields</p>
-        <p className="mb-2 text-xs text-black/60 dark:text-white/60">
-          Recurring structured questions (dropdowns/short fields, not essay prompts) across ATS
-          platforms — filling these in lets the Apply Run Brief answer them directly instead of
-          the Computer pausing to ask on every application.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Zip code</label>
-            <input className={inputClass} value={zipCode} onChange={(e) => setZipCode(e.target.value)} />
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Optional self-identification</CardTitle>
+          <CardDescription>
+            Used only to answer EEO/demographic questions during application review — never
+            scraped or guessed. Leave any field blank to have the Apply Run Brief tell the
+            automation to select &ldquo;decline to answer&rdquo; for it instead.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-3">
+          <Field label="Gender identity">
+            <Input value={genderIdentity} onChange={(e) => setGenderIdentity(e.target.value)} />
+          </Field>
+          <Field label="Race / ethnicity">
+            <Input value={raceEthnicity} onChange={(e) => setRaceEthnicity(e.target.value)} />
+          </Field>
+          <Field label="Sexual orientation">
+            <Input value={sexualOrientation} onChange={(e) => setSexualOrientation(e.target.value)} />
+          </Field>
+          <Field label="Veteran status">
+            <Input value={veteranStatus} onChange={(e) => setVeteranStatus(e.target.value)} />
+          </Field>
+          <Field label="Disability status">
+            <Input value={disabilityStatus} onChange={(e) => setDisabilityStatus(e.target.value)} />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Common application fields</CardTitle>
+          <CardDescription>
+            Recurring structured questions (dropdowns/short fields, not essay prompts) across ATS
+            platforms — filling these in lets the Apply Run Brief answer them directly instead of
+            the Computer pausing to ask on every application.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Zip code">
+              <Input value={zipCode} onChange={(e) => setZipCode(e.target.value)} />
+            </Field>
+            <Field label="Highest education level">
+              <Input
+                placeholder="e.g. Master's Degree"
+                value={highestEducationLevel}
+                onChange={(e) => setHighestEducationLevel(e.target.value)}
+              />
+            </Field>
+            <Field label='"How did you hear about this opportunity?" default'>
+              <Input value={howHeardDefault} onChange={(e) => setHowHeardDefault(e.target.value)} />
+            </Field>
+            <Field label="AI interview-policy agreement default">
+              <Input
+                placeholder="e.g. Yes, I agree"
+                value={aiPolicyAgreement}
+                onChange={(e) => setAiPolicyAgreement(e.target.value)}
+              />
+            </Field>
+            <Field label="Total years of experience (self-reported)">
+              <Input
+                type="number"
+                placeholder="e.g. 8 — your full work history, not just what's on the tailored resume"
+                value={totalYearsExperience}
+                onChange={(e) => setTotalYearsExperience(e.target.value)}
+              />
+            </Field>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Highest education level</label>
-            <input
-              className={inputClass}
-              placeholder="e.g. Master's Degree"
-              value={highestEducationLevel}
-              onChange={(e) => setHighestEducationLevel(e.target.value)}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="requires-relocation"
+              checked={requiresRelocationAssistance}
+              onCheckedChange={(checked) => setRequiresRelocationAssistance(checked === true)}
             />
+            <Label htmlFor="requires-relocation" className="font-normal">
+              Requires relocation assistance
+            </Label>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">
-              &ldquo;How did you hear about this opportunity?&rdquo; default
-            </label>
-            <input
-              className={inputClass}
-              value={howHeardDefault}
-              onChange={(e) => setHowHeardDefault(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">
-              AI interview-policy agreement default
-            </label>
-            <input
-              className={inputClass}
-              placeholder="e.g. Yes, I agree"
-              value={aiPolicyAgreement}
-              onChange={(e) => setAiPolicyAgreement(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">
-              Total years of experience (self-reported)
-            </label>
-            <input
-              type="number"
-              className={inputClass}
-              placeholder="e.g. 8 — your full work history, not just what's on the tailored resume"
-              value={totalYearsExperience}
-              onChange={(e) => setTotalYearsExperience(e.target.value)}
-            />
-          </div>
-        </div>
-        <label className="mt-3 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={requiresRelocationAssistance}
-            onChange={(e) => setRequiresRelocationAssistance(e.target.checked)}
-          />
-          Requires relocation assistance
-        </label>
-      </div>
+        </CardContent>
+      </Card>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-medium">Education</label>
-          <button
+          <Label>Education</Label>
+          <Button
             type="button"
-            className="text-xs hover:underline"
+            variant="ghost"
+            size="sm"
             onClick={() => setEducation((rows) => [...rows, { school: "", degree: "" }])}
           >
-            + Add
-          </button>
+            <Plus className="h-3.5 w-3.5" /> Add
+          </Button>
         </div>
         {education.map((row, i) => (
           <div key={i} className="flex gap-2">
-            <input
-              className={inputClass}
+            <Input
               placeholder="School"
               value={row.school}
               onChange={(e) => updateEducation(i, "school", e.target.value)}
             />
-            <input
-              className={inputClass}
+            <Input
               placeholder="Degree"
               value={row.degree}
               onChange={(e) => updateEducation(i, "degree", e.target.value)}
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setEducation((rows) => rows.filter((_, idx) => idx !== i))}
-              className="text-xs text-black/50 hover:underline dark:text-white/50"
             >
-              Remove
-            </button>
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         ))}
       </div>
 
-      <div className="rounded-lg border border-black/10 p-3 dark:border-white/15">
-        <p className="mb-2 text-sm font-medium">Target search criteria</p>
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Role families (comma-separated)</label>
-            <input className={inputClass} value={roleFamilies} onChange={(e) => setRoleFamilies(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Locations (comma-separated)</label>
-            <input className={inputClass} value={locations} onChange={(e) => setLocations(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Industries (comma-separated)</label>
-            <input className={inputClass} value={industries} onChange={(e) => setIndustries(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-black/60 dark:text-white/60">Salary floor</label>
-            <input type="number" className={inputClass} value={salaryFloor} onChange={(e) => setSalaryFloor(e.target.value)} />
-          </div>
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Target search criteria</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Field label="Role families (comma-separated)">
+            <Input value={roleFamilies} onChange={(e) => setRoleFamilies(e.target.value)} />
+          </Field>
+          <Field label="Locations (comma-separated)">
+            <Input value={locations} onChange={(e) => setLocations(e.target.value)} />
+          </Field>
+          <Field label="Industries (comma-separated)">
+            <Input value={industries} onChange={(e) => setIndustries(e.target.value)} />
+          </Field>
+          <Field label="Salary floor">
+            <Input type="number" value={salaryFloor} onChange={(e) => setSalaryFloor(e.target.value)} />
+          </Field>
+        </CardContent>
+      </Card>
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-        data-testid="profile-save"
-      >
+      <Button type="submit" disabled={saving} data-testid="profile-save">
         {saving ? "Saving..." : "Save profile"}
-      </button>
+      </Button>
     </form>
   );
 }

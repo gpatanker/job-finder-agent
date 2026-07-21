@@ -1,6 +1,7 @@
 import { asc } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { candidateProfile, resumeProfile, storyBankEntries } from "@/lib/db/schema";
+import { PageHeader } from "@/components/ui/page-header";
 import { SettingsClient } from "./settings-client";
 
 export default async function SettingsPage() {
@@ -12,12 +13,8 @@ export default async function SettingsPage() {
 
   return (
     <main className="flex flex-1 flex-col gap-6 p-6">
-      <h1 className="text-lg font-semibold">Settings</h1>
-      <SettingsClient
-        profile={profile ?? null}
-        resume={resume ?? null}
-        stories={stories}
-      />
+      <PageHeader title="Settings" description="Candidate profile, base resume, and story bank used across the app." />
+      <SettingsClient profile={profile ?? null} resume={resume ?? null} stories={stories} />
     </main>
   );
 }

@@ -3,13 +3,44 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import {
+  MoreHorizontal,
+  Plus,
+  ExternalLink,
+  FileText,
+  ClipboardList,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+} from "lucide-react";
 import type { Job } from "@/lib/db/schema";
 import {
   JOB_STATUSES,
   JOB_STATUS_LABELS,
   type JobStatus,
 } from "@/lib/pipeline/constants";
+import { jobStatusBadgeVariant, approvalStatusBadgeVariant } from "@/lib/pipeline/badge";
 import { Modal } from "@/components/ui/modal";
+import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   JobForm,
   EMPTY_JOB_FORM_VALUES,
@@ -56,11 +87,7 @@ function formValuesToPayload(values: JobFormValues) {
 
 function StatusBadge({ status }: { status: string }) {
   const label = JOB_STATUS_LABELS[status as JobStatus] ?? status;
-  return (
-    <span className="inline-flex rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
-      {label}
-    </span>
-  );
+  return <Badge variant={jobStatusBadgeVariant(status)}>{label}</Badge>;
 }
 
 function ApprovalBadge({
@@ -70,20 +97,13 @@ function ApprovalBadge({
   approvalStatus: string;
   jobId: string;
 }) {
-  const styles: Record<string, string> = {
-    pending: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400",
-    approved: "bg-green-500/15 text-green-700 dark:text-green-400",
-    rejected: "bg-red-500/15 text-red-700 dark:text-red-400",
-  };
   return (
-    <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-xs ${
-        styles[approvalStatus] ?? "bg-black/5 dark:bg-white/10"
-      }`}
+    <Badge
+      variant={approvalStatusBadgeVariant(approvalStatus)}
       data-testid={`approval-badge-${jobId}`}
     >
       {approvalStatus}
-    </span>
+    </Badge>
   );
 }
 
@@ -185,193 +205,196 @@ export function PipelineClient({ initialJobs }: { initialJobs: Job[] }) {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Pipeline</h1>
-        <button
-          type="button"
-          onClick={() => setShowAddDialog(true)}
-          className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
-          data-testid="add-job-button"
-        >
-          Add job
-        </button>
-      </div>
+    <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
+      <PageHeader
+        title="Pipeline"
+        description="Every role you're tracking, from first sighting to applied or blocked."
+        action={
+          <Button onClick={() => setShowAddDialog(true)} data-testid="add-job-button">
+            <Plus className="h-4 w-4" />
+            Add job
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap gap-2">
-        <input
+        <Input
           placeholder="Search company or title..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-64 rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20"
+          className="w-64"
           data-testid="pipeline-search"
         />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm dark:border-white/20"
-          data-testid="pipeline-status-filter"
-        >
-          <option value="">All statuses</option>
-          {JOB_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {JOB_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
+        <Select value={statusFilter || "__all"} onValueChange={(v) => setStatusFilter(v === "__all" ? "" : v)}>
+          <SelectTrigger className="w-48" data-testid="pipeline-status-filter">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all">All statuses</SelectItem>
+            {JOB_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {JOB_STATUS_LABELS[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {initialJobs.length === 0 ? (
-        <p
-          className="rounded-lg border border-dashed border-black/15 p-8 text-center text-sm text-black/60 dark:border-white/20 dark:text-white/60"
-          data-testid="pipeline-empty"
-        >
-          No jobs yet. Click &ldquo;Add job&rdquo; to track your first role.
-        </p>
+        <Card>
+          <CardContent
+            className="py-12 text-center text-sm text-muted-foreground"
+            data-testid="pipeline-empty"
+          >
+            No jobs yet. Click &ldquo;Add job&rdquo; to track your first role.
+          </CardContent>
+        </Card>
       ) : filteredJobs.length === 0 ? (
-        <p className="p-8 text-center text-sm text-black/60 dark:text-white/60">
-          No jobs match your filters.
-        </p>
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            No jobs match your filters.
+          </CardContent>
+        </Card>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/15">
-          <table className="w-full text-left text-sm" data-testid="pipeline-table">
-            <thead className="border-b border-black/10 bg-black/[0.02] dark:border-white/15 dark:bg-white/[0.03]">
-              <tr>
-                <th className="px-3 py-2 font-medium">Company / Title</th>
-                <th className="px-3 py-2 font-medium">Location</th>
-                <th className="px-3 py-2 font-medium">Match</th>
-                <th className="px-3 py-2 font-medium">Salary</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Approval</th>
-                <th className="px-3 py-2 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredJobs.map((job) => (
-                <tr
-                  key={job.id}
-                  className="border-b border-black/5 last:border-0 dark:border-white/10"
-                  data-testid={`job-row-${job.id}`}
-                >
-                  <td className="px-3 py-2">
-                    <p className="font-medium">{job.company}</p>
-                    <p className="text-black/60 dark:text-white/60">
-                      {job.title}
-                    </p>
-                  </td>
-                  <td className="px-3 py-2">
-                    {job.location ?? "—"}
-                    {job.workMode ? ` (${job.workMode})` : ""}
-                  </td>
-                  <td className="px-3 py-2">
-                    {job.matchScore != null ? `${job.matchScore}/100` : "—"}
-                  </td>
-                  <td className="px-3 py-2">
-                    {job.salaryText ??
-                      (job.salaryMin && job.salaryMax
-                        ? `$${job.salaryMin / 1000}k–$${job.salaryMax / 1000}k`
-                        : "—")}
-                  </td>
-                  <td className="px-3 py-2">
-                    <StatusBadge status={job.status} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <ApprovalBadge
-                      approvalStatus={job.approvalStatus}
-                      jobId={job.id}
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-2">
-                      {job.approvalStatus !== "approved" && (
-                        <button
-                          onClick={() =>
-                            patchJob(
-                              job,
-                              { status: "approved", approvalStatus: "approved" },
-                              `Approved ${job.company}`
-                            )
-                          }
-                          className="text-xs text-green-700 hover:underline dark:text-green-400"
-                          data-testid={`approve-${job.id}`}
-                        >
-                          Approve
-                        </button>
-                      )}
-                      {job.approvalStatus !== "rejected" && (
-                        <button
-                          onClick={() =>
-                            patchJob(
-                              job,
-                              { status: "rejected", approvalStatus: "rejected" },
-                              `Rejected ${job.company}`
-                            )
-                          }
-                          className="text-xs text-red-700 hover:underline dark:text-red-400"
-                          data-testid={`reject-${job.id}`}
-                        >
-                          Reject
-                        </button>
-                      )}
-                      {job.status !== "applied" && (
-                        <button
-                          onClick={() =>
-                            patchJob(
-                              job,
-                              { status: "applied" },
-                              `Marked ${job.company} as applied`
-                            )
-                          }
-                          className="text-xs hover:underline"
-                        >
-                          Mark applied
-                        </button>
-                      )}
-                      {job.applyUrl ? (
-                        <a
-                          href={job.applyUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs hover:underline"
-                        >
-                          Apply link
-                        </a>
-                      ) : null}
-                      <a
-                        href={`/tailor/${job.id}`}
-                        className="text-xs hover:underline"
-                        data-testid={`tailor-${job.id}`}
-                      >
-                        {job.tailoredResumeSlug ? "Resume ✓" : "Tailor resume"}
-                      </a>
-                      <a
-                        href={`/packet/${job.id}`}
-                        className="text-xs hover:underline"
-                        data-testid={`packet-${job.id}`}
-                      >
-                        Packet
-                      </a>
-                      <button
-                        onClick={() => setEditingJob(job)}
-                        className="text-xs hover:underline"
-                        data-testid={`edit-${job.id}`}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(job)}
-                        className="text-xs text-black/50 hover:underline dark:text-white/50"
-                        data-testid={`delete-${job.id}`}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+        <Card className="overflow-hidden py-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm" data-testid="pipeline-table">
+              <thead className="border-b border-border bg-secondary/40">
+                <tr>
+                  <th className="px-3 py-2.5 font-medium">Company / Title</th>
+                  <th className="px-3 py-2.5 font-medium">Location</th>
+                  <th className="px-3 py-2.5 font-medium">Match</th>
+                  <th className="px-3 py-2.5 font-medium">Salary</th>
+                  <th className="px-3 py-2.5 font-medium">Status</th>
+                  <th className="px-3 py-2.5 font-medium">Approval</th>
+                  <th className="px-3 py-2.5 font-medium text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredJobs.map((job) => (
+                  <tr
+                    key={job.id}
+                    className="border-b border-border last:border-0 hover:bg-secondary/20"
+                    data-testid={`job-row-${job.id}`}
+                  >
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium">{job.company}</p>
+                      <p className="text-muted-foreground">{job.title}</p>
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {job.location ?? "—"}
+                      {job.workMode ? ` (${job.workMode})` : ""}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {job.matchScore != null ? `${job.matchScore}/100` : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {job.salaryText ??
+                        (job.salaryMin && job.salaryMax
+                          ? `$${job.salaryMin / 1000}k–$${job.salaryMax / 1000}k`
+                          : "—")}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <StatusBadge status={job.status} />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <ApprovalBadge
+                        approvalStatus={job.approvalStatus}
+                        jobId={job.id}
+                      />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {job.approvalStatus !== "approved" && (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                patchJob(
+                                  job,
+                                  { status: "approved", approvalStatus: "approved" },
+                                  `Approved ${job.company}`
+                                )
+                              }
+                              data-testid={`approve-${job.id}`}
+                            >
+                              <Check className="h-4 w-4" /> Approve
+                            </DropdownMenuItem>
+                          )}
+                          {job.approvalStatus !== "rejected" && (
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() =>
+                                patchJob(
+                                  job,
+                                  { status: "rejected", approvalStatus: "rejected" },
+                                  `Rejected ${job.company}`
+                                )
+                              }
+                              data-testid={`reject-${job.id}`}
+                            >
+                              <X className="h-4 w-4" /> Reject
+                            </DropdownMenuItem>
+                          )}
+                          {job.status !== "applied" && (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                patchJob(
+                                  job,
+                                  { status: "applied" },
+                                  `Marked ${job.company} as applied`
+                                )
+                              }
+                            >
+                              <Check className="h-4 w-4" /> Mark applied
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem asChild data-testid={`tailor-${job.id}`}>
+                            <a href={`/tailor/${job.id}`}>
+                              <FileText className="h-4 w-4" />
+                              {job.tailoredResumeSlug ? "Resume ✓" : "Tailor resume"}
+                            </a>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild data-testid={`packet-${job.id}`}>
+                            <a href={`/packet/${job.id}`}>
+                              <ClipboardList className="h-4 w-4" /> Packet
+                            </a>
+                          </DropdownMenuItem>
+                          {job.applyUrl && (
+                            <DropdownMenuItem asChild>
+                              <a href={job.applyUrl} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-4 w-4" /> Apply link
+                              </a>
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={() => setEditingJob(job)}
+                            data-testid={`edit-${job.id}`}
+                          >
+                            <Pencil className="h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => handleDelete(job)}
+                            data-testid={`delete-${job.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       {showAddDialog && (

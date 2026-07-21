@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { Download, Sparkles } from "lucide-react";
 import type { Job, ResumeData } from "@/lib/db/schema";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { DiffView } from "../diff-view";
 
 export function TailorClient({
@@ -36,61 +41,59 @@ export function TailorClient({
 
   if (!resume) {
     return (
-      <p className="text-sm text-black/60 dark:text-white/60" data-testid="tailor-no-base-resume">
-        No base resume seeded yet. Go to Settings → Resume, or fill in{" "}
-        <code className="rounded bg-black/5 px-1 dark:bg-white/10">local/resume.seed.json</code>{" "}
-        and run <code className="rounded bg-black/5 px-1 dark:bg-white/10">npm run db:seed-profile</code>.
-      </p>
+      <Card>
+        <CardContent
+          className="py-8 text-sm text-muted-foreground"
+          data-testid="tailor-no-base-resume"
+        >
+          No base resume seeded yet. Go to Settings → Resume, or fill in{" "}
+          <code className="rounded bg-secondary px-1 py-0.5">local/resume.seed.json</code>{" "}
+          and run <code className="rounded bg-secondary px-1 py-0.5">npm run db:seed-profile</code>.
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <div className="max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold">
-          {job.company} — {job.title}
-        </h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
-          {job.location ?? "—"} {job.workMode ? `(${job.workMode})` : ""}
-        </p>
-      </div>
+      <PageHeader
+        title={`${job.company} — ${job.title}`}
+        description={`${job.location ?? "—"} ${job.workMode ? `(${job.workMode})` : ""}`}
+      />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={pending}
-          className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-          data-testid="generate-resume-button"
-        >
-          {pending
-            ? "Generating..."
-            : job.tailoredResumeSlug
-              ? "Regenerate & attach PDF"
-              : "Generate & attach PDF"}
-        </button>
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-3 py-4">
+          <Button onClick={handleGenerate} disabled={pending} data-testid="generate-resume-button">
+            <Sparkles className="h-4 w-4" />
+            {pending
+              ? "Generating..."
+              : job.tailoredResumeSlug
+                ? "Regenerate & attach PDF"
+                : "Generate & attach PDF"}
+          </Button>
 
-        {job.tailoredResumeSlug && (
-          <a
-            href={`/api/resumes/${job.tailoredResumeSlug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm hover:underline"
-            data-testid="download-resume-link"
-          >
-            Download PDF
-          </a>
-        )}
+          {job.tailoredResumeSlug && (
+            <Button variant="outline" asChild>
+              <a
+                href={`/api/resumes/${job.tailoredResumeSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="download-resume-link"
+              >
+                <Download className="h-4 w-4" />
+                Download PDF
+              </a>
+            </Button>
+          )}
 
-        {job.resumeCoverageScore != null && (
-          <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
-            Coverage: {job.resumeCoverageScore}/100
-          </span>
-        )}
-      </div>
+          {job.resumeCoverageScore != null && (
+            <Badge variant="info">Coverage: {job.resumeCoverageScore}/100</Badge>
+          )}
+        </CardContent>
+      </Card>
 
       {job.tailoredResumeSlug ? (
-        <p className="text-xs text-black/50 dark:text-white/50">
+        <p className="text-xs text-muted-foreground">
           Resume source: Generated from your base resume + role keywords. Generated{" "}
           {job.tailoredResumeGeneratedAt
             ? new Date(job.tailoredResumeGeneratedAt).toLocaleString()
@@ -98,18 +101,20 @@ export function TailorClient({
           .
         </p>
       ) : (
-        <p className="text-sm text-black/60 dark:text-white/60" data-testid="tailor-not-generated">
+        <p className="text-sm text-muted-foreground" data-testid="tailor-not-generated">
           No resume generated yet for this job.
         </p>
       )}
 
       {job.tailoringPlan && (
-        <div>
-          <h2 className="mb-2 text-sm font-medium">
-            What changed vs. your base resume
-          </h2>
-          <DiffView resume={resume} plan={job.tailoringPlan} />
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>What changed vs. your base resume</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DiffView resume={resume} plan={job.tailoringPlan} />
+          </CardContent>
+        </Card>
       )}
     </div>
   );
