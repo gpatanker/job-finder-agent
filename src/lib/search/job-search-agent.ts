@@ -203,6 +203,7 @@ Extract, dedupe, and score the candidates present in the discovery material, the
     system: systemPrompt,
     messages: [{ role: "user", content: userMessage }],
     tools: [submitTool],
+    tool_choice: { type: "tool", name: TOOL_NAME },
   });
   await logAnthropicUsage({ callSite: "job_search", model: MODEL, response });
 
