@@ -19,13 +19,15 @@ const TEXT_COLOR = "var(--color-muted-foreground)";
 
 export function FunnelChart({
   data,
+  title = "Funnel",
 }: {
   data: { stage: string; count: number }[];
+  title?: string;
 }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Funnel</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent className="h-64 pl-0">
         <ResponsiveContainer width="100%" height="100%">

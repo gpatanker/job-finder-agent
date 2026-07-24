@@ -6,6 +6,8 @@ const entries: QuestionBankEntry[] = [
     id: "qb-1",
     questionVariants: ["What is your greatest achievement?", "What are you most proud of?"],
     answer: "I built a reporting pipeline from scratch at Example Corp that cut manual validation work by 80%.",
+    hitCount: 0,
+    lastUsedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   },
@@ -75,7 +77,10 @@ describe("adaptFromQuestionBank", () => {
       entries,
     });
 
-    expect(result).toBe("At Acme, I'd bring the same instinct that led me to build that reporting pipeline at Example Corp.");
+    expect(result).toEqual({
+      answer: "At Acme, I'd bring the same instinct that led me to build that reporting pipeline at Example Corp.",
+      matchedEntryId: "qb-1",
+    });
   });
 
   it("returns null when the tool reports no match, so the caller falls back to story-bank synthesis", async () => {

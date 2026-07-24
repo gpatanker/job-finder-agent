@@ -1,7 +1,15 @@
 import Link from "next/link";
-import { eq } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { jobs, jobSearchSuggestions } from "@/lib/db/schema";
+import {
+  jobs,
+  jobSearchSuggestions,
+  agentRunQueue,
+  llmUsageLog,
+  applicationQuestions,
+  questionBankEntries,
+} from "@/lib/db/schema";
+import { BLOCK_REASON_LABELS, type BlockReason } from "@/lib/pipeline/constants";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Button } from "@/components/ui/button";
@@ -21,7 +29,18 @@ import {
   FileText,
   ClipboardList,
   ExternalLink,
+  Clock,
+  Hourglass,
+  AlertTriangle,
+  Recycle,
 } from "lucide-react";
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
 
 const FUNNEL_BUCKETS: { stage: string; statuses: string[] }[] = [
   { stage: "Discovered", statuses: ["discovered"] },
@@ -45,31 +64,51 @@ function formatSalary(job: {
 }
 
 export default async function OverviewPage() {
-  const [allJobs, newSuggestionsCount] = await Promise.all([
-    db
-      .select({
-        id: jobs.id,
-        company: jobs.company,
-        title: jobs.title,
-        location: jobs.location,
-        workMode: jobs.workMode,
-        status: jobs.status,
-        approvalStatus: jobs.approvalStatus,
-        matchScore: jobs.matchScore,
-        salaryMin: jobs.salaryMin,
-        salaryMax: jobs.salaryMax,
-        salaryText: jobs.salaryText,
-        applyUrl: jobs.applyUrl,
-        tailoredResumeSlug: jobs.tailoredResumeSlug,
-        createdAt: jobs.createdAt,
-      })
-      .from(jobs)
-      .where(eq(jobs.isSample, false)),
-    db
-      .select({ id: jobSearchSuggestions.id })
-      .from(jobSearchSuggestions)
-      .where(eq(jobSearchSuggestions.status, "new")),
-  ]);
+  const [allJobs, newSuggestionsCount, usageRows, runRows, questionBankRows, answeredQuestions] =
+    await Promise.all([
+      db
+        .select({
+          id: jobs.id,
+          company: jobs.company,
+          title: jobs.title,
+          location: jobs.location,
+          workMode: jobs.workMode,
+          status: jobs.status,
+          approvalStatus: jobs.approvalStatus,
+          matchScore: jobs.matchScore,
+          salaryMin: jobs.salaryMin,
+          salaryMax: jobs.salaryMax,
+          salaryText: jobs.salaryText,
+          applyUrl: jobs.applyUrl,
+          tailoredResumeSlug: jobs.tailoredResumeSlug,
+          createdAt: jobs.createdAt,
+          appliedAt: jobs.appliedAt,
+          blockReason: jobs.blockReason,
+          tailoredResumeGeneratedAt: jobs.tailoredResumeGeneratedAt,
+          applicationPromptsScannedAt: jobs.applicationPromptsScannedAt,
+        })
+        .from(jobs)
+        .where(eq(jobs.isSample, false)),
+      db
+        .select({ id: jobSearchSuggestions.id })
+        .from(jobSearchSuggestions)
+        .where(eq(jobSearchSuggestions.status, "new")),
+      db.select({ estimatedCostUsd: llmUsageLog.estimatedCostUsd }).from(llmUsageLog),
+      db
+        .select({
+          runType: agentRunQueue.runType,
+          status: agentRunQueue.status,
+          startedAt: agentRunQueue.startedAt,
+          completedAt: agentRunQueue.completedAt,
+          requiredManualInput: agentRunQueue.requiredManualInput,
+        })
+        .from(agentRunQueue),
+      db.select({ hitCount: questionBankEntries.hitCount }).from(questionBankEntries),
+      db
+        .select({ id: applicationQuestions.id })
+        .from(applicationQuestions)
+        .where(isNotNull(applicationQuestions.answer)),
+    ]);
 
   const total = allJobs.length;
 
@@ -114,6 +153,77 @@ export default async function OverviewPage() {
   const salaryDisclosed = allJobs.filter((j) => formatSalary(j) != null).length;
   const salaryPct = total > 0 ? Math.round((salaryDisclosed / total) * 100) : 0;
 
+  // --- Efficiency/cost KPIs ---
+  const MANUAL_MINUTES_PER_APPLICATION = 20;
+
+  const totalCostUsd = usageRows.reduce((sum, r) => sum + r.estimatedCostUsd, 0);
+  const costPerAppliedJob = applied > 0 && usageRows.length > 0 ? totalCostUsd / applied : null;
+
+  const applicationRuns = runRows.filter((r) => r.runType === "application");
+  const runsWithTiming = applicationRuns.filter((r) => r.startedAt && r.completedAt);
+  const runDurationMinutes = (r: (typeof runsWithTiming)[number]) =>
+    (new Date(r.completedAt!).getTime() - new Date(r.startedAt!).getTime()) / 60_000;
+  const avgSubmitMinutes =
+    runsWithTiming.length > 0
+      ? runsWithTiming.reduce((sum, r) => sum + runDurationMinutes(r), 0) / runsWithTiming.length
+      : null;
+
+  const appliedRunsWithTiming = runsWithTiming.filter((r) => r.status === "completed");
+  const automatedMinutesForApplied = appliedRunsWithTiming.reduce(
+    (sum, r) => sum + runDurationMinutes(r),
+    0
+  );
+  const manualTimeSavedHours =
+    applied > 0
+      ? Math.max(0, (applied * MANUAL_MINUTES_PER_APPLICATION - automatedMinutesForApplied) / 60)
+      : null;
+
+  const terminalRuns = applicationRuns.filter((r) =>
+    ["completed", "blocked", "cancelled"].includes(r.status)
+  );
+  const manualInterventionPct =
+    terminalRuns.length > 0
+      ? Math.round(
+          (100 * terminalRuns.filter((r) => r.requiredManualInput).length) / terminalRuns.length
+        )
+      : null;
+
+  const totalQuestionBankHits = questionBankRows.reduce((sum, r) => sum + r.hitCount, 0);
+  const reuseRatePct =
+    answeredQuestions.length > 0
+      ? Math.round((100 * totalQuestionBankHits) / answeredQuestions.length)
+      : null;
+
+  const blockedJobs = allJobs.filter((j) => j.status === "blocked");
+  const blockReasonData = Object.entries(
+    blockedJobs.reduce<Record<string, number>>((acc, j) => {
+      const reason = (j.blockReason as BlockReason | null) ?? "other";
+      acc[reason] = (acc[reason] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([reason, count]) => ({
+    stage: BLOCK_REASON_LABELS[reason as BlockReason] ?? reason,
+    count,
+  }));
+
+  const daysBetween = (a: Date | string, b: Date | string) =>
+    (new Date(b).getTime() - new Date(a).getTime()) / 86_400_000;
+  const discoveredToTailored = median(
+    allJobs
+      .filter((j) => j.tailoredResumeGeneratedAt)
+      .map((j) => daysBetween(j.createdAt, j.tailoredResumeGeneratedAt!))
+  );
+  const tailoredToScanned = median(
+    allJobs
+      .filter((j) => j.tailoredResumeGeneratedAt && j.applicationPromptsScannedAt)
+      .map((j) => daysBetween(j.tailoredResumeGeneratedAt!, j.applicationPromptsScannedAt!))
+  );
+  const scannedToApplied = median(
+    allJobs
+      .filter((j) => j.applicationPromptsScannedAt && j.appliedAt)
+      .map((j) => daysBetween(j.applicationPromptsScannedAt!, j.appliedAt!))
+  );
+
   const stats = [
     { label: "Total postings", value: total, icon: Briefcase, testid: "stat-total-postings" },
     {
@@ -155,6 +265,47 @@ export default async function OverviewPage() {
       value: `${salaryPct}%`,
       icon: DollarSign,
       testid: "stat-salary-disclosed",
+    },
+  ];
+
+  const efficiencyStats = [
+    {
+      label: "Est. API cost",
+      value: usageRows.length > 0 ? `$${totalCostUsd.toFixed(2)}` : "—",
+      icon: DollarSign,
+      testid: "stat-api-cost",
+    },
+    {
+      label: "Cost per applied job",
+      value: costPerAppliedJob != null ? `$${costPerAppliedJob.toFixed(2)}` : "—",
+      icon: DollarSign,
+      testid: "stat-cost-per-applied",
+    },
+    {
+      label: "Avg. time to submit",
+      value: avgSubmitMinutes != null ? `${Math.round(avgSubmitMinutes)} min` : "No data yet",
+      icon: Clock,
+      testid: "stat-avg-submit-time",
+    },
+    {
+      label: "Manual time saved (est.)",
+      value: manualTimeSavedHours != null ? `${manualTimeSavedHours.toFixed(1)} hrs` : "—",
+      icon: Hourglass,
+      accent: "success" as const,
+      testid: "stat-manual-time-saved",
+    },
+    {
+      label: "Manual intervention rate",
+      value: manualInterventionPct != null ? `${manualInterventionPct}%` : "No data yet",
+      icon: AlertTriangle,
+      accent: manualInterventionPct != null && manualInterventionPct > 50 ? ("warning" as const) : undefined,
+      testid: "stat-manual-intervention-rate",
+    },
+    {
+      label: "Question-bank reuse rate",
+      value: reuseRatePct != null ? `${reuseRatePct}%` : "—",
+      icon: Recycle,
+      testid: "stat-reuse-rate",
     },
   ];
 
@@ -217,9 +368,50 @@ export default async function OverviewPage() {
         ))}
       </div>
 
+      <div>
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Automation efficiency</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {efficiencyStats.map((stat) => (
+            <StatTile
+              key={stat.label}
+              label={stat.label}
+              value={stat.value}
+              icon={stat.icon}
+              accent={stat.accent}
+              data-testid={stat.testid}
+            />
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <FunnelChart data={funnelData} />
         <TrendChart data={trendData} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {blockReasonData.length > 0 && (
+          <FunnelChart data={blockReasonData} title="Block reasons" />
+        )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Time in stage (median days)</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 text-sm">
+            {[
+              { label: "Discovered → resume tailored", value: discoveredToTailored },
+              { label: "Tailored → prompts scanned", value: tailoredToScanned },
+              { label: "Scanned → applied", value: scannedToApplied },
+            ].map((row) => (
+              <div key={row.label} className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">{row.label}</span>
+                <span className="font-medium tabular-nums">
+                  {row.value != null ? `${row.value.toFixed(1)}d` : "—"}
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

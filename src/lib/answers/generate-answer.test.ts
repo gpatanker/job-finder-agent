@@ -18,6 +18,8 @@ const questionBank: QuestionBankEntry[] = [
     id: "qb-1",
     questionVariants: ["What is your greatest achievement?"],
     answer: "I built a reporting pipeline from scratch at Example Corp that cut manual validation work by 80%.",
+    hitCount: 0,
+    lastUsedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   },
@@ -43,7 +45,7 @@ describe("generateAnswer", () => {
             type: "tool_use",
             id: "toolu_1",
             name: "match_question_bank",
-            input: { matched: true, adaptedAnswer: "Adapted answer from the bank." },
+            input: { matched: true, entryIndex: 0, adaptedAnswer: "Adapted answer from the bank." },
           },
         ],
       });
@@ -64,6 +66,7 @@ describe("generateAnswer", () => {
 
       expect(result.answer).toBe("Adapted answer from the bank.");
       expect(result.matchedQuestionBank).toBe(true);
+      expect(result.matchedEntryId).toBe("qb-1");
       expect(result.sourceStories).toEqual([]);
       // Only the question-bank matcher's API call should have happened —
       // story-bank synthesis should never fire once the bank matches.

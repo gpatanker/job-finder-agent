@@ -30,6 +30,8 @@ function makeJob(overrides: Partial<Job> = {}): Job {
     resumeCoverageScore: null,
     applicationPromptsScannedAt: new Date(),
     applyReviewConfirmed: true,
+    appliedAt: null,
+    blockReason: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

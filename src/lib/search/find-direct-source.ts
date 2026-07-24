@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { logAnthropicUsage } from "@/lib/observability/llm-usage";
 
 const MODEL = "claude-sonnet-5";
 const TOOL_NAME = "submit_direct_url";
@@ -48,6 +49,7 @@ export async function findDirectSourceUrl(params: {
       messages: [{ role: "user", content: userMessage }],
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }, submitTool],
     });
+    await logAnthropicUsage({ callSite: "find_direct_source", model: MODEL, response });
 
     const toolUse = response.content.find(
       (c) => c.type === "tool_use" && c.name === TOOL_NAME

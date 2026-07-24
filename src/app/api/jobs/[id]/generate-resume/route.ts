@@ -34,7 +34,7 @@ export async function POST(
     .filter(Boolean)
     .join("\n");
 
-  const plan = await generateTailoringPlan(resume.data, context);
+  const plan = await generateTailoringPlan(resume.data, context, job.id);
   const tailored = applyTailoring(resume.data, plan);
   const pdfBuffer = await renderResumePdf(tailored, {
     title: `${job.company} — ${job.title} — Resume`,

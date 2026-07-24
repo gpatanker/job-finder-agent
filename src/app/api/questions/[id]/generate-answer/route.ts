@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { applicationQuestions, jobs, questionBankEntries, storyBankEntries } from "@/lib/db/schema";
 import { generateAnswer } from "@/lib/answers/generate-answer";
@@ -38,13 +38,14 @@ export async function POST(
     );
   }
 
-  const { answer, sourceStories, matchedQuestionBank } = await generateAnswer({
+  const { answer, sourceStories, matchedQuestionBank, matchedEntryId } = await generateAnswer({
     prompt: question.prompt,
     company: job.company,
     title: job.title,
     jobDescription: job.jobDescription,
     stories,
     questionBank,
+    jobId: job.id,
   });
 
   if (!answer) {
@@ -52,6 +53,13 @@ export async function POST(
       { error: "Couldn't find a relevant story or question-bank match to ground an answer in for this prompt." },
       { status: 422 }
     );
+  }
+
+  if (matchedEntryId) {
+    await db
+      .update(questionBankEntries)
+      .set({ hitCount: sql`${questionBankEntries.hitCount} + 1`, lastUsedAt: new Date() })
+      .where(eq(questionBankEntries.id, matchedEntryId));
   }
 
   const [updated] = await db

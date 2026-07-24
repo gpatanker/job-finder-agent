@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   APPROVAL_STATUSES,
+  BLOCK_REASONS,
   JOB_STATUSES,
   WORK_MODES,
 } from "@/lib/pipeline/constants";
@@ -32,6 +33,7 @@ export const updateJobSchema = createJobSchema.partial().extend({
   approvalStatus: z.enum(APPROVAL_STATUSES).optional(),
   applyAgentStatus: z.string().trim().optional(),
   applyReviewConfirmed: z.boolean().optional(),
+  blockReason: z.enum(BLOCK_REASONS).optional(),
 });
 
 export type CreateJobInput = z.infer<typeof createJobSchema>;

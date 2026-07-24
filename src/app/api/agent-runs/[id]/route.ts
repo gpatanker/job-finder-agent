@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { agentRunQueue, jobs } from "@/lib/db/schema";
 import { updateAgentRunSchema } from "@/lib/validation/agent-run";
+import { computeJobStatusSideEffects } from "@/lib/pipeline/status-effects";
 
 export async function GET(
   _request: NextRequest,
@@ -35,7 +36,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Run not found" }, { status: 404 });
   }
 
-  const patch: Record<string, unknown> = { ...parsed.data, updatedAt: new Date() };
+  // blockReason cascades to the jobs table below — agent_run_queue has no
+  // such column itself.
+  const { blockReason, ...runFields } = parsed.data;
+  const patch: Record<string, unknown> = { ...runFields, updatedAt: new Date() };
   if (parsed.data.status === "in_progress" && !existing.startedAt) {
     patch.startedAt = new Date();
   }
@@ -54,11 +58,20 @@ export async function PATCH(
     .returning();
 
   if (parsed.data.status) {
+    const [existingJob] = await db.select().from(jobs).where(eq(jobs.id, existing.jobId));
+    const jobStatus =
+      parsed.data.status === "blocked"
+        ? "blocked"
+        : parsed.data.status === "completed"
+          ? "applied"
+          : undefined;
     const jobPatch: Record<string, unknown> = {
       applyAgentStatus: parsed.data.status,
       updatedAt: new Date(),
+      ...(jobStatus ? { status: jobStatus } : {}),
+      ...(blockReason ? { blockReason } : {}),
+      ...(existingJob ? computeJobStatusSideEffects(existingJob, { status: jobStatus }) : {}),
     };
-    if (parsed.data.status === "blocked") jobPatch.status = "blocked";
     await db.update(jobs).set(jobPatch).where(eq(jobs.id, existing.jobId));
   }
 

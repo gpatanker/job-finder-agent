@@ -6,11 +6,13 @@ import { toast } from "sonner";
 import { CheckCircle2, Circle, Copy, FileText, ClipboardList, Send, Ban } from "lucide-react";
 import type { ApplicationQuestion, Job } from "@/lib/db/schema";
 import { computeApplyChecklist, isChecklistComplete } from "@/lib/apply/readiness";
+import { BLOCK_REASON_LABELS, BLOCK_REASONS, type BlockReason } from "@/lib/pipeline/constants";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function ApplyAgentCard({
   job: initialJob,
@@ -26,6 +28,7 @@ function ApplyAgentCard({
   const [brief, setBrief] = useState<string | null>(null);
   const [loadingBrief, setLoadingBrief] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [blockReason, setBlockReason] = useState<BlockReason>("other");
 
   const checklist = computeApplyChecklist(job, questions);
   const complete = isChecklistComplete(checklist);
@@ -81,11 +84,15 @@ function ApplyAgentCard({
     }
   }
 
-  async function markStatus(status: string, applyAgentStatus?: string) {
+  async function markStatus(status: string, applyAgentStatus?: string, reason?: BlockReason) {
     const res = await fetch(`/api/jobs/${job.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, ...(applyAgentStatus ? { applyAgentStatus } : {}) }),
+      body: JSON.stringify({
+        status,
+        ...(applyAgentStatus ? { applyAgentStatus } : {}),
+        ...(reason ? { blockReason: reason } : {}),
+      }),
     });
     const body = await res.json();
     if (res.ok) {
@@ -195,11 +202,23 @@ function ApplyAgentCard({
           <Button variant="outline" size="sm" onClick={() => markStatus("applied", "submitted")}>
             Mark submitted
           </Button>
+          <Select value={blockReason} onValueChange={(v) => setBlockReason(v as BlockReason)}>
+            <SelectTrigger className="w-56" data-testid={`block-reason-${job.id}`}>
+              <SelectValue placeholder="Block reason" />
+            </SelectTrigger>
+            <SelectContent>
+              {BLOCK_REASONS.map((reason) => (
+                <SelectItem key={reason} value={reason}>
+                  {BLOCK_REASON_LABELS[reason]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             variant="outline"
             size="sm"
             className="text-destructive hover:text-destructive"
-            onClick={() => markStatus("blocked", "blocked")}
+            onClick={() => markStatus("blocked", "blocked", blockReason)}
           >
             <Ban className="h-3.5 w-3.5" /> Block
           </Button>

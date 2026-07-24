@@ -64,6 +64,13 @@
       "when": 1784078914084,
       "tag": "0008_spooky_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784848845934,
+      "tag": "0009_awesome_champions",
+      "breakpoints": true
     }
   ]
 }

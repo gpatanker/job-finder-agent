@@ -4,6 +4,7 @@ import { deterministicTailoringPlan } from "./deterministic-tailoring";
 import { missingKeywords, scoreCoverage } from "./keyword-coverage";
 import { applyTailoring } from "./apply-tailoring";
 import { emptyTailoringPlan, type TailoringPlan } from "./types";
+import { logAnthropicUsage } from "@/lib/observability/llm-usage";
 
 const MODEL = "claude-sonnet-5";
 const COVERAGE_RETRY_THRESHOLD = 55;
@@ -131,7 +132,8 @@ function validatePlan(raw: unknown, resume: ResumeData): TailoringPlan {
  */
 export async function generateTailoringPlan(
   resume: ResumeData,
-  jobDescription: string
+  jobDescription: string,
+  jobId?: string
 ): Promise<TailoringPlan> {
   if (!jobDescription.trim()) {
     return emptyTailoringPlan();
@@ -163,6 +165,7 @@ export async function generateTailoringPlan(
       tools: [tool],
       tool_choice: { type: "tool", name: TOOL_NAME },
     });
+    await logAnthropicUsage({ callSite: "tailoring", model: MODEL, response, jobId });
 
     let toolUse = response.content.find((c) => c.type === "tool_use");
     let plan = validatePlan(toolUse?.type === "tool_use" ? toolUse.input : null, resume);
@@ -197,6 +200,7 @@ export async function generateTailoringPlan(
         tools: [tool],
         tool_choice: { type: "tool", name: TOOL_NAME },
       });
+      await logAnthropicUsage({ callSite: "tailoring", model: MODEL, response, jobId });
 
       toolUse = response.content.find((c) => c.type === "tool_use");
       const retryPlan = validatePlan(

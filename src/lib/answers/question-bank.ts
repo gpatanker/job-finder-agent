@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { QuestionBankEntry } from "@/lib/db/schema";
+import { logAnthropicUsage } from "@/lib/observability/llm-usage";
 
 const MODEL = "claude-sonnet-5";
 const TOOL_NAME = "match_question_bank";
@@ -24,8 +25,9 @@ export async function adaptFromQuestionBank(params: {
   title: string;
   jobDescription?: string | null;
   entries: QuestionBankEntry[];
-}): Promise<string | null> {
-  const { prompt, company, title, jobDescription, entries } = params;
+  jobId?: string;
+}): Promise<{ answer: string; matchedEntryId: string } | null> {
+  const { prompt, company, title, jobDescription, entries, jobId } = params;
 
   if (!process.env.ANTHROPIC_API_KEY || entries.length === 0) {
     return null;
@@ -87,6 +89,7 @@ ${bankText}`;
       tools: [tool],
       tool_choice: { type: "tool", name: TOOL_NAME },
     });
+    await logAnthropicUsage({ callSite: "question_bank", model: MODEL, response, jobId });
 
     const toolUse = response.content.find((c) => c.type === "tool_use");
     if (!toolUse || toolUse.type !== "tool_use") {
@@ -99,11 +102,17 @@ ${bankText}`;
       adaptedAnswer?: string;
     };
 
-    if (!input.matched || typeof input.adaptedAnswer !== "string" || !input.adaptedAnswer.trim()) {
+    if (
+      !input.matched ||
+      typeof input.adaptedAnswer !== "string" ||
+      !input.adaptedAnswer.trim() ||
+      typeof input.entryIndex !== "number" ||
+      !entries[input.entryIndex]
+    ) {
       return null;
     }
 
-    return input.adaptedAnswer.trim();
+    return { answer: input.adaptedAnswer.trim(), matchedEntryId: entries[input.entryIndex].id };
   } catch (err) {
     console.error("Question bank matching failed, falling back:", err);
     return null;

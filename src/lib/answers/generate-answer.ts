@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { QuestionBankEntry, StoryBankEntry } from "@/lib/db/schema";
 import { selectRelevantStories } from "./select-stories";
 import { adaptFromQuestionBank } from "./question-bank";
+import { logAnthropicUsage } from "@/lib/observability/llm-usage";
 
 const MODEL = "claude-sonnet-5";
 
@@ -32,7 +33,13 @@ export async function generateAnswer(params: {
   jobDescription?: string | null;
   stories: StoryBankEntry[];
   questionBank?: QuestionBankEntry[];
-}): Promise<{ answer: string; sourceStories: string[]; matchedQuestionBank?: boolean }> {
+  jobId?: string;
+}): Promise<{
+  answer: string;
+  sourceStories: string[];
+  matchedQuestionBank?: boolean;
+  matchedEntryId?: string;
+}> {
   if (params.questionBank && params.questionBank.length > 0) {
     const adapted = await adaptFromQuestionBank({
       prompt: params.prompt,
@@ -40,9 +47,15 @@ export async function generateAnswer(params: {
       title: params.title,
       jobDescription: params.jobDescription,
       entries: params.questionBank,
+      jobId: params.jobId,
     });
     if (adapted) {
-      return { answer: adapted, sourceStories: [], matchedQuestionBank: true };
+      return {
+        answer: adapted.answer,
+        sourceStories: [],
+        matchedQuestionBank: true,
+        matchedEntryId: adapted.matchedEntryId,
+      };
     }
   }
 
@@ -84,6 +97,12 @@ ${isPalantir ? "" : "- Do not mention Palantir or make this Palantir-specific â€
       max_tokens: 600,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
+    });
+    await logAnthropicUsage({
+      callSite: "generate_answer",
+      model: MODEL,
+      response,
+      jobId: params.jobId,
     });
 
     const textBlock = response.content.find((c) => c.type === "text");

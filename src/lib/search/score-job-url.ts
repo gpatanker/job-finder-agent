@@ -7,6 +7,7 @@ import { isBlockedSource } from "./blocked-sources";
 import { looksLikeGenericCareersPage } from "./specificity-check";
 import { textIndicatesClosedPosting, textMentionsTitle } from "./freshness-check";
 import { detectEmbeddedGreenhouseBoard } from "./live-board";
+import { logAnthropicUsage } from "@/lib/observability/llm-usage";
 
 const MODEL = "claude-sonnet-5";
 const TOOL_NAME = "submit_job_score";
@@ -310,6 +311,7 @@ Extract the job details and score the fit.`;
       tools: [submitTool],
       tool_choice: { type: "tool", name: TOOL_NAME },
     });
+    await logAnthropicUsage({ callSite: "score_job_url", model: MODEL, response });
 
     const toolUse = response.content.find((c) => c.type === "tool_use");
     if (!toolUse || toolUse.type !== "tool_use") {

@@ -7,6 +7,7 @@ import {
   timestamp,
   jsonb,
   uniqueIndex,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 import type { TailoringPlan } from "@/lib/resume/types";
 
@@ -43,6 +44,16 @@ export const jobs = pgTable("jobs", {
   applyReviewConfirmed: boolean("apply_review_confirmed")
     .notNull()
     .default(false),
+  // Set once, the first time status flips to "applied" — via the shared
+  // computeJobStatusSideEffects() helper, from either the "Mark submitted"
+  // button or an agent-run completing. The source timestamp for "avg time to
+  // submit" and the time-in-stage funnel on the Overview page.
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  // Categorized reason a blocked job was blocked, for the Overview page's
+  // block-reason breakdown. Free text rather than a DB enum since the
+  // taxonomy may grow; validated against a fixed list at the API layer
+  // (see BLOCK_REASONS in src/lib/pipeline/constants.ts).
+  blockReason: text("block_reason"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -89,6 +100,33 @@ export const agentRunQueue = pgTable("agent_run_queue", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
   resultSummary: text("result_summary"),
   error: text("error"),
+  // Set by whoever closes out the run (the live browser-automation agent)
+  // when completing it required a mid-flight pause to ask the user a
+  // question — an eligibility-gate fact-check or an out-of-scope-action
+  // decision. Feeds the Overview page's manual-intervention-rate KPI.
+  requiredManualInput: boolean("required_manual_input").notNull().default(false),
+}).enableRLS();
+
+/**
+ * One row per Anthropic/Perplexity API call across the app, for the Overview
+ * page's cost KPIs. `jobId` is nullable because several call sites (job
+ * search/discovery) aren't tied to a single job. Logging failures never
+ * break the calling feature — see logLlmUsage()'s try/catch in
+ * src/lib/observability/llm-usage.ts.
+ */
+export const llmUsageLog = pgTable("llm_usage_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  callSite: text("call_site").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  requestCount: integer("request_count").notNull().default(1),
+  estimatedCostUsd: doublePrecision("estimated_cost_usd").notNull(),
+  jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 }).enableRLS();
 
 export type EducationEntry = { school: string; degree: string };
@@ -246,6 +284,10 @@ export const questionBankEntries = pgTable("question_bank_entries", {
   id: uuid("id").defaultRandom().primaryKey(),
   questionVariants: jsonb("question_variants").$type<string[]>().notNull().default([]),
   answer: text("answer").notNull(),
+  // Incremented each time adaptFromQuestionBank() matches this entry — the
+  // Overview page's question-bank reuse-rate KPI.
+  hitCount: integer("hit_count").notNull().default(0),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -303,3 +345,4 @@ export type StoryBankEntry = typeof storyBankEntries.$inferSelect;
 export type JobSearchSuggestion = typeof jobSearchSuggestions.$inferSelect;
 export type PlatformFieldMapping = typeof platformFieldMappings.$inferSelect;
 export type QuestionBankEntry = typeof questionBankEntries.$inferSelect;
+export type LlmUsageLogEntry = typeof llmUsageLog.$inferSelect;

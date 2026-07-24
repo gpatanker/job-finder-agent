@@ -15,6 +15,10 @@ This app is deployed as: **Vercel** (Next.js hosting + serverless functions) + *
 
 [console.anthropic.com](https://console.anthropic.com) → Settings → API Keys → Create Key. This is `ANTHROPIC_API_KEY`.
 
+## 2b. Get a Perplexity API key
+
+[perplexity.ai/settings/api](https://www.perplexity.ai/settings/api) → Generate API Key. This is `PERPLEXITY_API_KEY`, used for the broad-discovery step of the Job Search Agent (Sonar API). If left unset, Search/Import will return a warning and no candidates instead of failing outright.
+
 ## 3. Local setup
 
 ```bash
@@ -71,7 +75,7 @@ vercel link             # creates/links a Vercel project, connects to your GitHu
 
 Push the same env vars from `.env.local` to Vercel for Production and Development:
 ```bash
-for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY DATABASE_URL ANTHROPIC_API_KEY; do
+for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY DATABASE_URL ANTHROPIC_API_KEY PERPLEXITY_API_KEY; do
   value=$(grep "^$name=" .env.local | cut -d= -f2-)
   printf '%s' "$value" | vercel env add "$name" production
   printf '%s' "$value" | vercel env add "$name" development
