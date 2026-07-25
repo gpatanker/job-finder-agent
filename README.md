@@ -17,13 +17,53 @@ A personal job-application command center: track roles through a pipeline, gener
 
 ## Four agents, one external
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full picture and a diagram of how these fit together.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full write-up (why Opus only shows up once, what the Analyst actually sees, the trigger model).
 
 - **Job Search Agent** — Perplexity's Search API does broad web discovery across several parallel queries; one bounded Claude Sonnet call structures, dedupes, and scores whatever it found. Results are suggestions only, never auto-added to your pipeline.
 - **Resume Tailoring Agent** — bounded: reorders your fixed bullet inventory and swaps only pre-approved synonym phrasing. Every choice is re-validated in code regardless of what the model returns.
 - **Answer Generation Agent** — a single grounded completion per prompt, drawing only from your story bank via deterministic keyword retrieval.
 - **Pipeline Analyst** — Claude Opus, run occasionally (triggered by new applications or a new interview, not a clock), reasoning over the full pipeline's history to surface what's working. Never edits anything itself.
 - **"Computer" (external, not built here)** — whatever browser-automation tool you point at the Run Queue to actually fill in and (if authorized) submit forms. This dashboard hands off a structured brief and stops.
+
+```mermaid
+flowchart TD
+    PD["Perplexity Search API<br/>(broad web discovery)"] --> JSA["Job Search Agent<br/>Claude Sonnet 5"]
+    JSA --> JSS[("job_search_suggestions")]
+    JSS -->|"human: Promote"| J[("jobs")]
+
+    J --> RT["Resume Tailoring Agent<br/>Claude Sonnet 5"]
+    RT -->|"tailored PDF + coverage score"| J
+
+    J --> AG["Answer Generation Agent<br/>Claude Sonnet 5"]
+    AG -->|"drafted answers"| AQ[("application_questions")]
+
+    J -->|"readiness checklist +<br/>submit authorization"| ARQ[("agent_run_queue")]
+    ARQ -->|"Apply Run Brief"| Computer["Computer<br/>(Claude Code + Playwright)<br/>fills & submits real forms"]
+    Computer -->|"PATCH close-out:<br/>status, appliedAt, blockReason"| J
+    Computer -->|"PATCH close-out:<br/>startedAt/completedAt"| ARQ
+    Computer -->|"daily Gmail sweep<br/>(first run of the day)"| J
+
+    J --> LLM[("llm_usage_log")]
+    ARQ --> LLM
+
+    J --> Elig{{"Eligible?<br/>1+ new interview OR<br/>10+ new applications"}}
+    ARQ --> Elig
+    LLM --> Elig
+    Elig -->|no| Skip["skip — wait for more signal"]
+    Elig -->|yes| PA["Pipeline Analyst<br/>Claude Opus 4.8"]
+    PA -->|"writes"| AR[("analyst_reports")]
+    AR --> Human(["You review the<br/>recommendations"])
+    Human -.->|"manually adjusts prompts/criteria"| JSA
+    Human -.->|"manually adjusts"| RT
+    Human -.->|"manually adjusts"| AG
+
+    classDef agent fill:#4f46e5,color:#fff,stroke:none;
+    classDef store fill:#334155,color:#fff,stroke:none;
+    classDef human fill:#059669,color:#fff,stroke:none;
+    class PD,JSA,RT,AG,PA,Computer agent;
+    class JSS,J,AQ,ARQ,LLM,AR store;
+    class Human human;
+```
 
 ## Stack
 
