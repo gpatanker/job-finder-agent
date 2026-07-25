@@ -23,6 +23,7 @@ Confirmed via explicit user feedback across many sessions — treat these as res
 - Demographics: Gender Male; Race/ethnicity Asian (South Asian), not Hispanic/Latino; Sexual orientation Heterosexual/Straight; Veteran status not a veteran; Disability status no disability. Fill these into EEO/demographic surveys directly when the form offers matching options — optional under EEO law, but no reason to skip once known.
 - HubSpot: has used it before, if asked.
 - Education on multi-entry forms: list both Master's and Bachelor's. Single-entry-only forms: default to Master's, flag it so the user can override.
+- Education **Discipline** dropdown (Greenhouse/Ashby-style forms): the exact major name often isn't an option. If "Business Analytics" isn't offered, use "Statistics" instead. If "Managerial Economics" isn't offered, use "Economics" instead. Same pattern as the Degree field's "Master's" vs "Master's Degree" mismatch — read the actual options rather than assuming the exact major name exists.
 - Eligibility-gate questions that could self-disqualify (e.g. "do you have N years of experience in X specific narrow thing") and aren't covered by a plain fact above: **always pause and ask the user** — never guess in either direction.
 - Essay/free-text answers: ~2 short paragraphs, at most one stacked number/bullet. Don't over-write.
 - During a live, authorized batch run: don't re-confirm fields already known from this list — only pause for genuinely undetermined fields.
