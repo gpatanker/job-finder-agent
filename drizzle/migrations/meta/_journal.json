@@ -78,6 +78,13 @@
       "when": 1784948825219,
       "tag": "0010_real_rogue",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784949984330,
+      "tag": "0011_unknown_ultragirl",
+      "breakpoints": true
     }
   ]
 }

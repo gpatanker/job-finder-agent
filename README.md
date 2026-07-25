@@ -11,14 +11,18 @@ A personal job-application command center: track roles through a pipeline, gener
 - **Application Packet** — scrapes candidate-written short-answer prompts from Greenhouse postings (and a generic fallback for other platforms), and drafts grounded answers from your story bank, which you review and approve.
 - **Apply Agent** — a readiness checklist (resume ready, apply link on file, prompts scanned/approved, work-auth confirmed) and a submit-authorization toggle, which produces a "Computer Apply Run Brief" for a separate browser-automation step.
 - **Run Queue** — the persisted handoff point: queued application tasks with full context, so you never have to paste a brief by hand.
-- **Search / Import** — an agentic feature that uses Claude's web-search tool to find currently-open postings matching your criteria, scores them, and surfaces them as suggestions. Nothing lands in your pipeline automatically — you review and explicitly promote each one.
+- **Search / Import** — an agentic feature that discovers currently-open postings matching your criteria, scores them, and surfaces them as suggestions. Nothing lands in your pipeline automatically — you review and explicitly promote each one.
+- **Pipeline Analyst** — an occasional, high-level pass (Claude Opus) over your entire application history that surfaces what's actually correlating with interviews and what's wasting spend. Triggered by new signal, not a schedule. See [ARCHITECTURE.md](ARCHITECTURE.md).
 - **Settings** — your candidate profile, work-authorization defaults, target search criteria, base resume (as structured data), and story bank, all editable from the UI.
 
-## Three agents, one external
+## Four agents, one external
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full picture and a diagram of how these fit together.
+
+- **Job Search Agent** — Perplexity's Search API does broad web discovery across several parallel queries; one bounded Claude Sonnet call structures, dedupes, and scores whatever it found. Results are suggestions only, never auto-added to your pipeline.
 - **Resume Tailoring Agent** — bounded: reorders your fixed bullet inventory and swaps only pre-approved synonym phrasing. Every choice is re-validated in code regardless of what the model returns.
-- **Answer Generation** — a single grounded completion per prompt, drawing only from your story bank via deterministic keyword retrieval.
-- **Job Search Agent** — the one genuinely tool-using agent: Claude's native `web_search` tool (executed server-side by Anthropic, no custom search integration) finds real postings; results are suggestions only, never auto-added to your pipeline.
+- **Answer Generation Agent** — a single grounded completion per prompt, drawing only from your story bank via deterministic keyword retrieval.
+- **Pipeline Analyst** — Claude Opus, run occasionally (triggered by new applications or a new interview, not a clock), reasoning over the full pipeline's history to surface what's working. Never edits anything itself.
 - **"Computer" (external, not built here)** — whatever browser-automation tool you point at the Run Queue to actually fill in and (if authorized) submit forms. This dashboard hands off a structured brief and stops.
 
 ## Stack
@@ -26,7 +30,7 @@ A personal job-application command center: track roles through a pipeline, gener
 - Next.js 16 (App Router, TypeScript, Turbopack) on Vercel
 - Supabase: Postgres (via Drizzle ORM), Storage (generated resume PDFs), Auth (single-account gate), Row Level Security on every table
 - pdfkit + bundled Carlito font (Calibri-metric-compatible, OFL-licensed) for resume PDF generation
-- Claude API (`claude-sonnet-5`) for resume tailoring, answer generation, and job search
+- Claude API (`claude-sonnet-5` for tailoring/answers/search-structuring, `claude-opus-4-8` for the Pipeline Analyst) and the Perplexity Search API (job-search discovery)
 - cheerio for prompt scraping
 
 ## Public repo, private data

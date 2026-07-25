@@ -5,13 +5,16 @@ export type LlmCallSite =
   | "find_direct_source"
   | "job_search"
   | "score_job_url"
-  | "perplexity_discovery";
+  | "perplexity_discovery"
+  | "pipeline_analyst";
 
 // Approximate published per-million-token rates. These drive an *estimated*
 // cost KPI, not a billing reconciliation — update if Anthropic publishes
-// different Sonnet 5 rates.
+// different rates. Opus 4.8's rate here (2.5x Sonnet 5's) matches the same
+// multiplier already documented in job-search-agent.ts's MODEL comment.
 const ANTHROPIC_PRICING_PER_MILLION_TOKENS: Record<string, { input: number; output: number }> = {
   "claude-sonnet-5": { input: 2, output: 10 },
+  "claude-opus-4-8": { input: 5, output: 25 },
 };
 const ANTHROPIC_FALLBACK_PRICING = { input: 2, output: 10 };
 

@@ -2,13 +2,13 @@
 
 **Purpose:** If this conversation is lost and you're starting fresh, read this file top to bottom before doing anything else. It captures the state, decisions, and hard-won operational knowledge that aren't visible just from reading the code. Update it as things change — it's meant to stay current, not be a one-time snapshot.
 
-Last updated: 2026-07-24.
+Last updated: 2026-07-24 (later same day — added the Pipeline Analyst).
 
 ---
 
 ## What this project is
 
-`job-finder-agent` is Gaurav Patanker's personal job-application command center. Full product description, stack, and setup steps live in [README.md](README.md), [DEPLOYMENT.md](DEPLOYMENT.md), [TESTING.md](TESTING.md), and [ROADMAP.md](ROADMAP.md) — read those for the "what" and "how to run it." This file is for the "where things stand" and "what to watch out for."
+`job-finder-agent` is Gaurav Patanker's personal job-application command center. Full product description, stack, and setup steps live in [README.md](README.md), [DEPLOYMENT.md](DEPLOYMENT.md), [TESTING.md](TESTING.md), and [ROADMAP.md](ROADMAP.md) — read those for the "what" and "how to run it." **[ARCHITECTURE.md](ARCHITECTURE.md)** has the four-agent structural picture and a workflow diagram. This file is for the "where things stand" and "what to watch out for."
 
 Core loop: the **Job Search Agent** (Claude + native `web_search`) finds candidate postings → human promotes a suggestion into the pipeline → **Resume Tailoring Agent** generates a tailored PDF → application short-answer prompts get scraped and drafted → an **Apply Run** is queued with a full brief → a human (via Claude Code + Playwright MCP, in practice) actually fills and submits the form in a real browser, then updates `jobs.status`/`jobs.applyAgentStatus` and `agentRunQueue.status` in the DB to close the loop.
 
@@ -49,6 +49,16 @@ Spot-checked against raw DB queries on 2026-07-24 — the math is correct. Two n
 ## First-round interview tracking (added 2026-07-24)
 
 `jobs.firstRoundInterviewAt` (nullable timestamp) + two Overview page tiles ("First-round interviews" count, "Interview rate" = count ÷ applied). **There is no automated email integration** — this column is only ever set by manually sweeping Gmail (via the Gmail MCP tools available in a Claude Code session) and cross-referencing hits against the `jobs` table by company name, then writing confirmed matches with a throwaway script. Re-run the sweep periodically by searching Gmail for interview/screening keywords (`subject:interview`, `"phone screen"`, `"recruiter screen"`, `"would love to connect"`, etc.) scoped to `after:` the earliest job's `createdAt`, and only persist matches you're actually confident about — a lot of what turns up (SpaceX, Supermicro, Nominal, Bolt Graphics as of this writing) is real interview activity from applications made *outside* this app and should stay out of this count. Use the email's own outreach date as the timestamp, not the scheduled meeting time (meetings reschedule; the outreach date doesn't).
+
+## Pipeline Analyst (added 2026-07-24)
+
+A fourth agent — Claude Opus 4.8, not Sonnet — that reviews the entire job history and writes a short, data-grounded analysis (`/analyst` page, `src/lib/analyst/pipeline-analyst.ts`). Full design rationale in [ARCHITECTURE.md](ARCHITECTURE.md); the operational bits:
+
+- **Triggered by signal, not schedule** (`src/lib/analyst/eligibility.ts`): 1+ new first-round interview, or 10+ new applications, since the last report. `POST /api/analyst/run` checks this itself and no-ops cheaply if nothing qualifies — pass `{ force: true }` to run anyway.
+- **Wired into the apply-run flow**: the `apply-run` skill calls this endpoint after every batch closes out, so it naturally runs right after a day's applying/interview-sweep produces new signal, with no separate cron/scheduler needed.
+- **New table**: `analyst_reports` — `triggerReason`/`triggerDetail`, `jobsAnalyzedCount`, `model`, `summary`, `recommendations` (jsonb array of `{title, detail, category}`), `estimatedCostUsd`.
+- **First real run (2026-07-24, triggered by the Fluidstack + Redwood Materials interviews)** cost $0.14 and correctly flagged that both interviews came from *below-median* match/coverage scores while high-match roles had zero interviews — a genuinely useful, non-obvious finding given the data, though explicitly caveated as too small a sample (2 interviews) to trust yet. Worth re-reading once more interview data accumulates to see if that pattern holds or was noise.
+- It never changes prompts, criteria, or resumes itself — recommendations are for a human (or a Claude Code session, on request) to act on.
 
 ## Current pipeline state (as of 2026-07-24 evening)
 

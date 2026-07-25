@@ -10,6 +10,7 @@ import {
   Bot,
   ListOrdered,
   Search,
+  Sparkles,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/apply-agent", label: "Apply Agent", icon: Bot },
   { href: "/run-queue", label: "Run Queue", icon: ListOrdered },
   { href: "/search", label: "Search / Import", icon: Search },
+  { href: "/analyst", label: "Pipeline Analyst", icon: Sparkles },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

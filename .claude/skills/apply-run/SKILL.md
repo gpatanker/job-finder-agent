@@ -102,3 +102,21 @@ If the run was never flipped to `"in_progress"` earlier in the session (so `star
 This single PATCH replaces the old two-table raw-SQL script — `jobs.status`/`applyAgentStatus`/`appliedAt`/`blockReason` all cascade automatically from it. Still delete the job's resume PDF from `.playwright-mcp/` immediately after closing out, so stray files don't accumulate (check `.playwright-mcp/*.pdf` for leftovers periodically; they're a sign of an incompletely-closed-out job).
 
 If the API is genuinely unreachable (e.g. dev server down), fall back to a throwaway `.mjs` script written with the `Write` tool **inside the project directory** (not the scratchpad — Node's ESM resolution needs to find `node_modules`), run via `node --env-file=.env.local ./script.mjs`, always ending with `process.exit(0)` — but in that case, manually set `appliedAt`/`blockReason`/`startedAt`/`completedAt` yourself in the same script, since there's no route left to do it for you.
+
+## After the last job in a batch: check the Pipeline Analyst
+
+Once every job in this apply-run session is closed out (all applied/blocked, resume PDFs cleaned up), call the Analyst — it decides for itself whether enough has changed to be worth an Opus run, so this is cheap to call even when nothing happens:
+
+```js
+async (page) => {
+  const cookies = await page.context().cookies("http://localhost:3000");
+  const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+  const res = await page.request.post(`http://localhost:3000/api/analyst/run`, {
+    headers: { cookie: cookieHeader, "Content-Type": "application/json" },
+    data: {},
+  });
+  return { status: res.status(), body: await res.json() };
+};
+```
+
+If the response is `{ ran: true, report }`, summarize `report.summary` and the top recommendation or two for the user — don't just say "done," since the whole point is surfacing what it found. If `{ ran: false, eligibility }`, no need to mention it unless the user asks; not enough new signal has accumulated since the last report (see `src/lib/analyst/eligibility.ts` for the exact thresholds). See `ARCHITECTURE.md` for how this fits into the rest of the pipeline.

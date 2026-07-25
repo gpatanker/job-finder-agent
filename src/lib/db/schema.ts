@@ -343,6 +343,33 @@ export const jobSearchSuggestions = pgTable("job_search_suggestions", {
     .defaultNow(),
 }).enableRLS();
 
+export type AnalystRecommendation = {
+  title: string;
+  detail: string;
+  category: "job_search" | "resume_tailoring" | "cost" | "process" | "other";
+};
+
+/**
+ * One row per Pipeline Analyst run (Claude Opus, occasional/high-level —
+ * see src/lib/analyst/pipeline-analyst.ts). Triggered by new signal (a
+ * batch of new applications, or a new interview), not a fixed schedule —
+ * see checkAnalystEligibility() in src/lib/analyst/eligibility.ts. Never
+ * auto-applies its own recommendations; a human decides what to act on.
+ */
+export const analystReports = pgTable("analyst_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  triggerReason: text("trigger_reason").notNull(),
+  triggerDetail: text("trigger_detail"),
+  jobsAnalyzedCount: integer("jobs_analyzed_count").notNull(),
+  model: text("model").notNull(),
+  summary: text("summary").notNull(),
+  recommendations: jsonb("recommendations").$type<AnalystRecommendation[]>().notNull().default([]),
+  estimatedCostUsd: doublePrecision("estimated_cost_usd"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}).enableRLS();
+
 export type Job = typeof jobs.$inferSelect;
 export type ApplicationQuestion = typeof applicationQuestions.$inferSelect;
 export type AgentRunQueueItem = typeof agentRunQueue.$inferSelect;
@@ -353,3 +380,4 @@ export type JobSearchSuggestion = typeof jobSearchSuggestions.$inferSelect;
 export type PlatformFieldMapping = typeof platformFieldMappings.$inferSelect;
 export type QuestionBankEntry = typeof questionBankEntries.$inferSelect;
 export type LlmUsageLogEntry = typeof llmUsageLog.$inferSelect;
+export type AnalystReport = typeof analystReports.$inferSelect;
