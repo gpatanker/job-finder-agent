@@ -9,6 +9,26 @@ The app itself never submits an application — submission always happens out-of
 
 Read the job's Apply Run Brief (from the Run Queue or Apply Agent page) first — it already contains the candidate's structured answers, resume link, and submit authorization. This skill fills the gaps the brief doesn't cover: how to actually operate each platform's form correctly.
 
+## Daily interview sweep (do this first, once per day)
+
+Before starting the **first** apply run of a calendar day, check whether one has already run today:
+
+```js
+// via browser_run_code_unsafe against the app's own authenticated cookies, or a throwaway .mjs script:
+SELECT count(*) FROM agent_run_queue WHERE started_at::date = CURRENT_DATE
+```
+
+If that count is `0` (nothing has been started yet today), sweep Gmail for interview activity **before** processing any job in this session:
+
+1. Search Gmail (via the Gmail MCP tools) for interview-related activity in the last ~7 days — that window comfortably covers observed recruiter response times without re-scanning the whole history every day. Use a few broad queries like `after:{7 days ago} (subject:interview OR subject:"phone screen" OR subject:"recruiter screen" OR subject:"next steps" OR "would love to connect" OR "would love to chat" OR "quick call" OR "schedule a call")` — see the 2026-07-24 sweep in git history / conversation for the fuller keyword set if this misses something.
+2. Cross-reference each hit's company name against `jobs` (any status, not just `applied`) by company name.
+3. **Auto-write** `jobs.firstRoundInterviewAt` (the date of the outreach email itself, not the scheduled meeting time — meetings reschedule) for clear-cut matches: company name matches a tracked job, and the email is unambiguously about scheduling/confirming a real interview or screening call.
+4. **Ask the user** rather than guessing when it's ambiguous — e.g., the recruiter references a different job title than what's tracked for that company (this happened with Redwood Materials), or the email could plausibly be generic networking rather than an actual interview request.
+5. Real interview activity that doesn't match any company in `jobs` is from an application made outside this app — don't record it, but it's worth mentioning to the user in passing (they may want it added to the pipeline retroactively).
+6. Then proceed with the requested apply run(s) as normal.
+
+If a run has already started today, skip this — don't re-sweep multiple times in one day.
+
 ## Standing default answers (don't re-ask these)
 
 Confirmed via explicit user feedback across many sessions — treat these as resolved, not per-application judgment calls:
