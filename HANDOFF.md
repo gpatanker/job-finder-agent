@@ -2,7 +2,7 @@
 
 **Purpose:** If this conversation is lost and you're starting fresh, read this file top to bottom before doing anything else. It captures the state, decisions, and hard-won operational knowledge that aren't visible just from reading the code. Update it as things change — it's meant to stay current, not be a one-time snapshot.
 
-Last updated: 2026-07-24 (later same day — added the Pipeline Analyst).
+Last updated: 2026-07-25.
 
 ---
 
@@ -10,7 +10,7 @@ Last updated: 2026-07-24 (later same day — added the Pipeline Analyst).
 
 `job-finder-agent` is Gaurav Patanker's personal job-application command center. Full product description, stack, and setup steps live in [README.md](README.md), [DEPLOYMENT.md](DEPLOYMENT.md), [TESTING.md](TESTING.md), and [ROADMAP.md](ROADMAP.md) — read those for the "what" and "how to run it." **[ARCHITECTURE.md](ARCHITECTURE.md)** has the four-agent structural picture and a workflow diagram. This file is for the "where things stand" and "what to watch out for."
 
-Core loop: the **Job Search Agent** (Claude + native `web_search`) finds candidate postings → human promotes a suggestion into the pipeline → **Resume Tailoring Agent** generates a tailored PDF → application short-answer prompts get scraped and drafted → an **Apply Run** is queued with a full brief → a human (via Claude Code + Playwright MCP, in practice) actually fills and submits the form in a real browser, then updates `jobs.status`/`jobs.applyAgentStatus` and `agentRunQueue.status` in the DB to close the loop.
+Core loop: the **Job Search Agent** (Perplexity Search API for discovery + one bounded Claude Sonnet call to structure/score — see below, not native `web_search` anymore) finds candidate postings → human promotes a suggestion into the pipeline → **Resume Tailoring Agent** generates a tailored PDF → application short-answer prompts get scraped and drafted → an **Apply Run** is queued with a full brief → a human (via Claude Code + Playwright MCP, in practice) actually fills and submits the form in a real browser, then closes it out through the real API (see below) to update `jobs`/`agentRunQueue` and close the loop. A fourth agent, the **Pipeline Analyst** (Claude Opus), periodically reviews the whole history for what's actually working — see below.
 
 **The app itself never submits an application.** Submission always happens out-of-band, via Playwright browser automation driven by a Claude Code session (this is "the Computer" referenced in the UI/briefs).
 
