@@ -54,6 +54,13 @@ export const jobs = pgTable("jobs", {
   // taxonomy may grow; validated against a fixed list at the API layer
   // (see BLOCK_REASONS in src/lib/pipeline/constants.ts).
   blockReason: text("block_reason"),
+  // When a recruiter/company first indicated a first-round interview was
+  // happening (the outreach email, not the scheduled meeting time itself,
+  // which can reschedule). Set manually today via an inbox sweep — there's
+  // no automated inbox integration — not by any pipeline side effect.
+  firstRoundInterviewAt: timestamp("first_round_interview_at", {
+    withTimezone: true,
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

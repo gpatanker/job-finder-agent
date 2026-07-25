@@ -71,6 +71,13 @@
       "when": 1784848845934,
       "tag": "0009_awesome_champions",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784948825219,
+      "tag": "0010_real_rogue",
+      "breakpoints": true
     }
   ]
 }

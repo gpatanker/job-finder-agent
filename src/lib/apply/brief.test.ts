@@ -37,6 +37,7 @@ const job = {
   applyReviewConfirmed: true,
   appliedAt: null,
   blockReason: null,
+  firstRoundInterviewAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 } satisfies Job;

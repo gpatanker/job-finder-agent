@@ -33,6 +33,8 @@ import {
   Hourglass,
   AlertTriangle,
   Recycle,
+  PhoneCall,
+  Percent,
 } from "lucide-react";
 
 function median(values: number[]): number | null {
@@ -84,6 +86,7 @@ export default async function OverviewPage() {
           createdAt: jobs.createdAt,
           appliedAt: jobs.appliedAt,
           blockReason: jobs.blockReason,
+          firstRoundInterviewAt: jobs.firstRoundInterviewAt,
           tailoredResumeGeneratedAt: jobs.tailoredResumeGeneratedAt,
           applicationPromptsScannedAt: jobs.applicationPromptsScannedAt,
         })
@@ -152,6 +155,12 @@ export default async function OverviewPage() {
       : null;
   const salaryDisclosed = allJobs.filter((j) => formatSalary(j) != null).length;
   const salaryPct = total > 0 ? Math.round((salaryDisclosed / total) * 100) : 0;
+
+  // Set manually via periodic inbox sweeps (see HANDOFF.md) — no automated
+  // email integration exists, so this reflects however recently that sweep
+  // was last run, not a live count.
+  const firstRoundInterviews = allJobs.filter((j) => j.firstRoundInterviewAt != null).length;
+  const interviewRatePct = applied > 0 ? Math.round((100 * firstRoundInterviews) / applied) : null;
 
   // --- Efficiency/cost KPIs ---
   const MANUAL_MINUTES_PER_APPLICATION = 20;
@@ -246,6 +255,19 @@ export default async function OverviewPage() {
       icon: Send,
       accent: "success" as const,
       testid: "stat-applied",
+    },
+    {
+      label: "First-round interviews",
+      value: firstRoundInterviews,
+      icon: PhoneCall,
+      accent: firstRoundInterviews > 0 ? ("success" as const) : undefined,
+      testid: "stat-first-round-interviews",
+    },
+    {
+      label: "Interview rate",
+      value: interviewRatePct != null ? `${interviewRatePct}%` : "—",
+      icon: Percent,
+      testid: "stat-interview-rate",
     },
     {
       label: "Blocked / Rejected",
