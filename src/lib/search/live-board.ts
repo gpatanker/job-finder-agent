@@ -97,10 +97,20 @@ export async function fetchLiveBoardJobs(board: AtsBoard): Promise<LiveBoardJob[
  * same fuzzy word-overlap matcher already used (and tested) for the
  * per-page title check, so a lightly reworded/renamed posting still
  * matches instead of being wrongly flagged closed.
+ *
+ * Checked in both directions on purpose: textMentionsTitle(text, title)
+ * requires most of `title`'s words to appear in `text`, which only handles
+ * the board's title being the LONGER of the two. A candidate title that's
+ * longer than the board's own (e.g. LLM-extracted "Senior GTM Strategy &
+ * Operations Manager, Enterprise" vs. the board's plain "GTM Strategy & Ops
+ * Manager") fails that direction even though it's the same posting — most
+ * of the long title's words just aren't going to appear in the short one.
+ * The reverse check (board title's words found in the candidate's title)
+ * catches that case without weakening the original direction.
  */
 export function matchLiveJob(jobs: LiveBoardJob[], title: string): LiveBoardJob | null {
   for (const job of jobs) {
-    if (textMentionsTitle(job.title, title)) return job;
+    if (textMentionsTitle(job.title, title) || textMentionsTitle(title, job.title)) return job;
   }
   return null;
 }

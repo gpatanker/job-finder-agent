@@ -113,16 +113,23 @@ export function computeOverrepresentedCompanies(knownJobs: { company: string; ti
  * suggestions total) because the prompt only asked for "5-8 candidates" in
  * the stated industries without pushing the agent to branch into adjacent
  * ones or explicit query variety. Query variety now comes from
- * buildDiscoveryQueries firing several distinct Perplexity requests in
- * parallel (role synonyms, adjacent industries, direct ATS postings) rather
- * than from one model deciding to branch out mid-conversation — with
- * companies already heavily represented in this candidate's history
- * explicitly deprioritized in each query so the agent doesn't keep
- * re-mining the same handful of names.
+ * buildDiscoveryQueries firing several distinct, rotating Perplexity
+ * requests in parallel (role synonyms, adjacent industries, direct ATS
+ * postings) rather than from one model deciding to branch out
+ * mid-conversation. Companies already heavily represented in this
+ * candidate's history are surfaced to the STRUCTURING step below (not baked
+ * into the search query text) — a 2026-07-27 measurement found appending an
+ * "avoid these companies" instruction to the Perplexity query text was a
+ * complete no-op at retrieval (identical results with/without it, since
+ * /search is ranked retrieval, not an instruction-follower) while eating
+ * 58-74% of every query's character budget. Claude, unlike the search
+ * endpoint, actually follows instructions, so this is the step where that
+ * guidance can do something.
  */
 export async function findJobCandidates(params: {
   profile: CandidateProfile;
   knownJobs: { company: string; title: string }[];
+  lastRunDate?: Date | null;
   broaden?: boolean;
 }): Promise<{ candidates: JobCandidate[]; warning?: string }> {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -136,7 +143,7 @@ export async function findJobCandidates(params: {
 
   const discovery = await discoverCandidatePostings({
     profile: params.profile,
-    overrepresentedCompanies: overrepresented,
+    lastRunDate: params.lastRunDate,
     broaden: params.broaden,
   });
 
@@ -173,6 +180,7 @@ Rules:
 - Prefer the company's own careers/ATS page over a third-party aggregator's copy of the same listing when the material gives you both, since aggregators keep mirroring a posting long after the original closes.
 - Skip anything already in the candidate's known-jobs list below (avoid near-duplicates by company+title) — this list covers the candidate's full suggestion history, not just recent runs.
 - Extract and score every clearly-qualified, distinct posting actually present in the material — don't artificially cap yourself at a small number, but don't pad with irrelevant or duplicate ones either.
+- OVERREPRESENTED COMPANIES (see list below, if any): the candidate already has 3+ prior suggestions from these companies. Don't exclude them outright, but deprioritize — only include another posting from one of these if it's a meaningfully better fit (higher score) than a typical inclusion, so the result set doesn't keep re-mining the same handful of famous names at the expense of everything else in the discovery material.
 - You MUST call ${TOOL_NAME} with your findings — do not just respond with text.`;
 
   const userMessage = `CANDIDATE BACKGROUND
@@ -188,6 +196,9 @@ SEARCH CRITERIA
 
 ALREADY-KNOWN JOBS (skip near-duplicates of these)
 ${knownList || "(none yet)"}
+
+OVERREPRESENTED COMPANIES (deprioritize per the scoring rules above)
+${overrepresented.join("\n") || "(none)"}
 
 DISCOVERY MATERIAL (from web search already performed — extract only what's actually here)
 ${discovery.combinedText}

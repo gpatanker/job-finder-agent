@@ -124,6 +124,13 @@ describe("matchLiveJob", () => {
   it("returns null when no live job matches", () => {
     expect(matchLiveJob(jobs, "Product Manager")).toBeNull();
   });
+
+  it("matches when the CANDIDATE's title is longer than the board's own title (reverse direction — real failure mode: an LLM-extracted title like 'Senior GTM Strategy & Operations Manager, Enterprise' vs. the board's plain 'GTM Strategy & Ops Manager')", () => {
+    const board = [{ title: "GTM Strategy & Ops Manager", url: "https://example.com/jobs/3" }];
+    expect(matchLiveJob(board, "Senior GTM Strategy & Operations Manager, Enterprise")).toEqual(
+      board[0]
+    );
+  });
 });
 
 describe("detectEmbeddedGreenhouseBoard", () => {

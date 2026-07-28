@@ -26,6 +26,22 @@ const GENERIC_PATH_SEGMENTS = new Set([
 const JOB_ID_QUERY_PARAMS = ["gh_jid", "ashby_jid"];
 
 /**
+ * ATS hosts where the path is just {token}/{org} with no job ID — a bare
+ * board root, not a specific posting. Real case (2026-07-27): Perplexity
+ * regularly returns URLs like `job-boards.greenhouse.io/snorkelai?error=true`
+ * — a single path segment that isn't in GENERIC_PATH_SEGMENTS (it's the
+ * company's own board token, so it can't be enumerated), which slipped past
+ * the check below and got treated as a specific-enough deep link. On these
+ * hosts specifically, one bare path segment always means "board root," so
+ * check the host rather than trying to match every possible token.
+ */
+const ATS_BOARD_ROOT_HOSTS = new Set([
+  "job-boards.greenhouse.io",
+  "boards.greenhouse.io",
+  "jobs.ashbyhq.com",
+]);
+
+/**
  * Heuristic: a real job-posting deep link almost always has a job ID or a
  * role-specific slug in its path (Greenhouse/Ashby/Lever URLs always do), or
  * a job-ID query parameter from an embedded ATS widget. A bare "/careers",
@@ -49,6 +65,9 @@ export function looksLikeGenericCareersPage(url: string): boolean {
   const segments = parsed.pathname.split("/").filter(Boolean);
   if (segments.length === 0) return true;
   if (segments.length === 1 && GENERIC_PATH_SEGMENTS.has(segments[0].toLowerCase())) {
+    return true;
+  }
+  if (segments.length === 1 && ATS_BOARD_ROOT_HOSTS.has(parsed.hostname.toLowerCase())) {
     return true;
   }
   return false;

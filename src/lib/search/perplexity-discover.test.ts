@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CandidateProfile } from "@/lib/db/schema";
-import { buildDiscoveryQueries } from "./perplexity-discover";
+import { ATS_DOMAIN_FILTER, buildDiscoveryQueries } from "./perplexity-discover";
 
 const baseProfile = {
   id: "profile-1",
@@ -37,77 +37,110 @@ const baseProfile = {
 } satisfies CandidateProfile;
 
 describe("buildDiscoveryQueries", () => {
-  it("returns 6 distinct queries covering core roles, synonyms, AI/cloud/infra industries, direct ATS postings, energy/climate, and defense/govtech", () => {
-    const queries = buildDiscoveryQueries({ profile: baseProfile, overrepresentedCompanies: [] });
-    expect(queries).toHaveLength(6);
-    expect(queries[0].query).toContain("Business Operations Manager, Strategy & Operations Manager");
-    expect(queries[0].query).toContain("San Francisco, CA, Remote - US");
-    expect(queries[1].query).toContain("Revenue Operations Manager");
-    expect(queries[2].query).toContain("AI infrastructure, Cloud infrastructure");
-    expect(queries[2].query).toContain("cybersecurity");
-    expect(queries[2].query).toContain("AI/ML company");
-    expect(queries[4].query).toContain("energy");
-    expect(queries[4].query).toContain("climate tech");
-    expect(queries[5].query).toContain("defense");
-    expect(queries[5].query).toContain("govtech");
+  beforeEach(() => {
+    // Rotation is day-based (Date.now()), so pin the clock for determinism.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-27T12:00:00Z"));
   });
 
-  it("keeps the AI/cloud/infra query separate from energy/climate and defense/govtech (no cross-contamination)", () => {
-    const queries = buildDiscoveryQueries({ profile: baseProfile, overrepresentedCompanies: [] });
-    expect(queries[2].query).not.toContain("energy");
-    expect(queries[2].query).not.toContain("defense");
-    expect(queries[2].query).not.toContain("govtech");
-    expect(queries[4].query).not.toContain("defense");
-    expect(queries[5].query).not.toContain("climate tech");
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("only sets a domain filter on the direct-ATS-postings query", () => {
-    const queries = buildDiscoveryQueries({ profile: baseProfile, overrepresentedCompanies: [] });
-    expect(queries[0].domainFilter).toBeUndefined();
-    expect(queries[1].domainFilter).toBeUndefined();
-    expect(queries[2].domainFilter).toBeUndefined();
-    expect(queries[3].domainFilter).toEqual(["job-boards.greenhouse.io", "jobs.ashbyhq.com"]);
-    expect(queries[4].domainFilter).toBeUndefined();
-    expect(queries[5].domainFilter).toBeUndefined();
+  it("returns 8 rotating role queries plus 3 fixed industry queries (11 total)", () => {
+    const queries = buildDiscoveryQueries({ profile: baseProfile });
+    expect(queries).toHaveLength(11);
   });
 
-  it("falls back to sensible defaults when search criteria is missing", () => {
-    const profile = { ...baseProfile, searchCriteria: null };
-    const queries = buildDiscoveryQueries({ profile, overrepresentedCompanies: [] });
-    expect(queries[0].query).toContain("Business Operations Manager");
-    expect(queries[0].query).toContain("Remote - US");
-    expect(queries[2].query).toContain("AI infrastructure, cloud infrastructure, developer tools");
-  });
-
-  it("appends a deprioritization clause for overrepresented companies to every query", () => {
-    const queries = buildDiscoveryQueries({
-      profile: baseProfile,
-      overrepresentedCompanies: ["Anthropic (5 prior suggestions)"],
-    });
+  it("puts the ATS domain filter on every query — not just one, unlike the old pipeline", () => {
+    const queries = buildDiscoveryQueries({ profile: baseProfile });
     for (const q of queries) {
-      expect(q.query).toContain("Avoid these companies");
-      expect(q.query).toContain("Anthropic (5 prior suggestions)");
+      expect(q.domainFilter).toEqual(ATS_DOMAIN_FILTER);
     }
   });
 
-  it("does not include a deprioritization clause when nothing is overrepresented", () => {
-    const queries = buildDiscoveryQueries({ profile: baseProfile, overrepresentedCompanies: [] });
+  it("never includes the old 'Avoid these companies' instruction text (moved to the Claude structuring prompt, where it can actually be followed)", () => {
+    const queries = buildDiscoveryQueries({ profile: baseProfile });
     for (const q of queries) {
       expect(q.query).not.toContain("Avoid these companies");
     }
   });
 
-  it("adds a broadening note to every query except the ATS-specific one when broaden is true", () => {
-    const queries = buildDiscoveryQueries({
-      profile: baseProfile,
-      overrepresentedCompanies: [],
-      broaden: true,
-    });
-    expect(queries[0].query).toContain("Focus on adjacent industries");
-    expect(queries[1].query).toContain("Focus on adjacent industries");
-    expect(queries[2].query).toContain("Focus on adjacent industries");
-    expect(queries[3].query).not.toContain("Focus on adjacent industries");
-    expect(queries[4].query).toContain("Focus on adjacent industries");
-    expect(queries[5].query).toContain("Focus on adjacent industries");
+  it("keeps the three industry-context queries separate (AI/cloud/infra, energy/climate, defense/govtech) rather than merged into one", () => {
+    const queries = buildDiscoveryQueries({ profile: baseProfile });
+    const industryQueries = queries.slice(-3);
+    expect(industryQueries[0].query).toContain("AI infrastructure, Cloud infrastructure");
+    expect(industryQueries[0].query).not.toContain("energy");
+    expect(industryQueries[0].query).not.toContain("defense");
+    expect(industryQueries[1].query).toContain("energy");
+    expect(industryQueries[1].query).toContain("climate");
+    expect(industryQueries[1].query).not.toContain("defense");
+    expect(industryQueries[2].query).toContain("defense");
+    expect(industryQueries[2].query).toContain("govtech");
+    expect(industryQueries[2].query).not.toContain("climate");
+  });
+
+  it("splits role queries between a fresh track (exact afterDate cutoff) and a backfill track (no recency filter at all)", () => {
+    const lastRunDate = new Date("2026-07-24T00:00:00Z");
+    const queries = buildDiscoveryQueries({ profile: baseProfile, lastRunDate });
+    const roleQueries = queries.slice(0, 8);
+    const freshTrack = roleQueries.filter((q) => q.afterDate);
+    const backfillTrack = roleQueries.filter((q) => !q.afterDate);
+    expect(freshTrack.length).toBeGreaterThan(0);
+    expect(backfillTrack.length).toBeGreaterThan(0);
+    for (const q of freshTrack) {
+      expect(q.afterDate).toBe("07/24/2026");
+      expect(q.recencyFilter).toBeUndefined();
+    }
+    for (const q of backfillTrack) {
+      expect(q.recencyFilter).toBeUndefined();
+    }
+  });
+
+  it("industry queries never carry a recency filter (pure backfill breadth)", () => {
+    const lastRunDate = new Date("2026-07-24T00:00:00Z");
+    const queries = buildDiscoveryQueries({ profile: baseProfile, lastRunDate });
+    const industryQueries = queries.slice(-3);
+    for (const q of industryQueries) {
+      expect(q.afterDate).toBeUndefined();
+      expect(q.recencyFilter).toBeUndefined();
+    }
+  });
+
+  it("falls back to a month recency bucket on the fresh track when there's no prior run date yet (cold start)", () => {
+    const queries = buildDiscoveryQueries({ profile: baseProfile, lastRunDate: null });
+    const roleQueries = queries.slice(0, 8);
+    const freshTrack = roleQueries.filter((_, i) => i % 2 === 0);
+    for (const q of freshTrack) {
+      expect(q.afterDate).toBeUndefined();
+      expect(q.recencyFilter).toBe("month");
+    }
+  });
+
+  it("draws a disjoint slice of role phrases for the widen/broaden pass instead of repeating the same queries", () => {
+    const normal = buildDiscoveryQueries({ profile: baseProfile }).slice(0, 8).map((q) => q.query);
+    const widened = buildDiscoveryQueries({ profile: baseProfile, broaden: true })
+      .slice(0, 8)
+      .map((q) => q.query);
+    const overlap = normal.filter((q) => widened.includes(q));
+    expect(overlap.length).toBe(0);
+  });
+
+  it("falls back to sensible defaults when search criteria is missing", () => {
+    const profile = { ...baseProfile, searchCriteria: null };
+    const queries = buildDiscoveryQueries({ profile });
+    expect(queries).toHaveLength(11);
+    const industryQueries = queries.slice(-3);
+    expect(industryQueries[0].query).toContain("AI infrastructure, cloud infrastructure, developer tools");
+    for (const q of queries) {
+      expect(q.query).toContain("Remote - US");
+    }
+  });
+
+  it("role queries rotate to a different slice on a different day", () => {
+    const day1 = buildDiscoveryQueries({ profile: baseProfile }).slice(0, 8).map((q) => q.query);
+    vi.setSystemTime(new Date("2026-08-05T12:00:00Z"));
+    const day2 = buildDiscoveryQueries({ profile: baseProfile }).slice(0, 8).map((q) => q.query);
+    expect(day1).not.toEqual(day2);
   });
 });

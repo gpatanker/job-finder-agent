@@ -21,6 +21,24 @@ describe("looksLikeGenericCareersPage", () => {
     ).toBe(false);
   });
 
+  it("flags a bare Greenhouse board root — just the company token, no job ID (real case: job-boards.greenhouse.io/snorkelai?error=true)", () => {
+    expect(looksLikeGenericCareersPage("https://job-boards.greenhouse.io/snorkelai")).toBe(true);
+    expect(looksLikeGenericCareersPage("https://job-boards.greenhouse.io/snorkelai?error=true")).toBe(
+      true
+    );
+    expect(looksLikeGenericCareersPage("https://boards.greenhouse.io/acme")).toBe(true);
+  });
+
+  it("flags a bare Ashby board root — just the org slug, no posting ID", () => {
+    expect(looksLikeGenericCareersPage("https://jobs.ashbyhq.com/plaid")).toBe(true);
+  });
+
+  it("does not flag an Ashby deep link with a posting ID", () => {
+    expect(
+      looksLikeGenericCareersPage("https://jobs.ashbyhq.com/plaid/5d8abedc-018a-4b42-ae1f-0e70b34f2007")
+    ).toBe(false);
+  });
+
   it("does not flag a company career-site URL with a role-specific slug", () => {
     expect(
       looksLikeGenericCareersPage("https://openai.com/careers/business-operations-manager-san-francisco/")

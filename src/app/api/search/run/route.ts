@@ -1,13 +1,26 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { candidateProfile, jobSearchSuggestions, jobs } from "@/lib/db/schema";
 import { findJobCandidates, type JobCandidate } from "@/lib/search/job-search-agent";
 import { resolveCandidateFreshness, type LiveBoardCache } from "@/lib/search/resolve-freshness";
+import { discoverFromKnownCompanyBoards } from "@/lib/search/known-company-boards";
 
 const TARGET_NEW_SUGGESTIONS = 20;
 const MAX_WIDEN_PASSES = 1;
-const MAX_NEW_SUGGESTIONS_PER_COMPANY = 2;
+// Was 2 when a single prolific company could crowd out a thin run. A
+// 2026-07-27 real run under the new query pipeline found 289 candidates and
+// this cap alone filtered 127 of them (nearly double the 65 that got
+// through) — with real volume recovered, the cap is now the binding
+// constraint rather than a useful diversity guard. Raised to 4; revisit if
+// per-company crowding becomes a problem again at this new volume.
+const MAX_NEW_SUGGESTIONS_PER_COMPANY = 4;
+// Safety buffer subtracted from the last-known suggestion timestamp before
+// using it as Perplexity's search_after_date_filter cutoff — covers the gap
+// between "run finished" and "results actually landed" (documented timing
+// quirk, see HANDOFF) plus normal clock skew, without needing a dedicated
+// "last run" column.
+const LAST_RUN_SAFETY_BUFFER_DAYS = 3;
 
 function normalize(company: string, title: string): string {
   return `${company}|${title}`.toLowerCase().replace(/\s+/g, " ").trim();
@@ -151,6 +164,19 @@ export async function POST() {
   ]);
 
   const allKnown = [...existingJobs, ...existingSuggestions];
+
+  // Proxy for "last successful run" without a dedicated column: the most
+  // recent suggestion we've ever recorded, minus a safety buffer. Falls
+  // back to no cutoff (cold start) when there's no suggestion history yet.
+  const [mostRecentSuggestion] = await db
+    .select({ createdAt: jobSearchSuggestions.createdAt })
+    .from(jobSearchSuggestions)
+    .orderBy(desc(jobSearchSuggestions.createdAt))
+    .limit(1);
+  const lastRunDate = mostRecentSuggestion
+    ? new Date(mostRecentSuggestion.createdAt.getTime() - LAST_RUN_SAFETY_BUFFER_DAYS * 86_400_000)
+    : null;
+
   const state: RunState = {
     knownKeys: new Set(allKnown.map((j) => normalize(j.company, j.title))),
     knownUrlKeys: new Set(
@@ -170,7 +196,21 @@ export async function POST() {
   const liveBoardCache: LiveBoardCache = new Map();
 
   let knownJobs = allKnown.map((j) => ({ company: j.company, title: j.title }));
-  const { candidates, warning: firstWarning } = await findJobCandidates({ profile, knownJobs });
+  const [{ candidates: perplexityCandidates, warning: firstWarning }, boardPollCandidates] =
+    await Promise.all([
+      findJobCandidates({ profile, knownJobs, lastRunDate }),
+      // Free channel: directly poll every company we already have a
+      // Greenhouse/Ashby link for, rather than paying for a search request
+      // to ask "did this company post anything new" — see
+      // known-company-boards.ts for why this is worth doing every run.
+      discoverFromKnownCompanyBoards({
+        known: allKnown.map((j) => ({ company: j.company, applyUrl: j.applyUrl })),
+        roleFamilies: profile.searchCriteria?.roleFamilies?.length
+          ? profile.searchCriteria.roleFamilies
+          : ["Business Operations Manager"],
+      }),
+    ]);
+  const candidates = [...perplexityCandidates, ...boardPollCandidates];
   let found = candidates.length;
   await processCandidates(candidates, state, liveBoardCache);
 
@@ -193,7 +233,7 @@ export async function POST() {
       ...existingJobs.map((j) => ({ company: j.company, title: j.title })),
       ...newlyKnown,
     ];
-    const widenResult = await findJobCandidates({ profile, knownJobs, broaden: true });
+    const widenResult = await findJobCandidates({ profile, knownJobs, lastRunDate, broaden: true });
     found += widenResult.candidates.length;
     lastWarning = widenResult.warning ?? lastWarning;
     const addedBefore = state.added;
@@ -210,6 +250,7 @@ export async function POST() {
 
   return NextResponse.json({
     found,
+    boardPollFound: boardPollCandidates.length,
     added: state.added,
     skipped: state.skipped,
     recovered: state.recovered,
