@@ -51,7 +51,11 @@ describe("fetchLiveBoardJobs", () => {
         ok: true,
         json: async () => ({
           jobs: [
-            { title: "Strategy & Operations Manager", absolute_url: "https://job-boards.greenhouse.io/ripple/jobs/1" },
+            {
+              title: "Strategy & Operations Manager",
+              absolute_url: "https://job-boards.greenhouse.io/ripple/jobs/1",
+              location: { name: "San Francisco, CA" },
+            },
             { title: "Software Engineer", absolute_url: "https://job-boards.greenhouse.io/ripple/jobs/2" },
           ],
         }),
@@ -59,8 +63,30 @@ describe("fetchLiveBoardJobs", () => {
     );
     const jobs = await fetchLiveBoardJobs({ platform: "greenhouse", boardToken: "ripple" });
     expect(jobs).toEqual([
-      { title: "Strategy & Operations Manager", url: "https://job-boards.greenhouse.io/ripple/jobs/1" },
+      {
+        title: "Strategy & Operations Manager",
+        url: "https://job-boards.greenhouse.io/ripple/jobs/1",
+        location: "San Francisco, CA",
+      },
       { title: "Software Engineer", url: "https://job-boards.greenhouse.io/ripple/jobs/2" },
+    ]);
+  });
+
+  it("carries an Ashby board's location through", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          jobs: [
+            { title: "Strategic Initiatives", jobUrl: "https://jobs.ashbyhq.com/plaid/abc", location: "Remote - US" },
+          ],
+        }),
+      })
+    );
+    const jobs = await fetchLiveBoardJobs({ platform: "ashby", orgSlug: "plaid" });
+    expect(jobs).toEqual([
+      { title: "Strategic Initiatives", url: "https://jobs.ashbyhq.com/plaid/abc", location: "Remote - US" },
     ]);
   });
 
@@ -131,6 +157,20 @@ describe("matchLiveJob", () => {
       board[0]
     );
   });
+
+  it(
+    "regression: the reverse direction no longer wildcard-matches a board title with no Latin " +
+      "characters (it normalized to '' and was treated as a trivially-true match, so the first " +
+      "such job on a board hijacked every candidate lookup)",
+    () => {
+      const board = [
+        { title: "ソリューションアーキテクト (プリセールス)", url: "https://example.com/jobs/4" },
+        { title: "Business Operations Manager", url: "https://example.com/jobs/5" },
+      ];
+      expect(matchLiveJob(board, "Business Operations Manager")).toEqual(board[1]);
+      expect(matchLiveJob(board, "Technical Program Manager, Compute")).toBeNull();
+    }
+  );
 });
 
 describe("detectEmbeddedGreenhouseBoard", () => {

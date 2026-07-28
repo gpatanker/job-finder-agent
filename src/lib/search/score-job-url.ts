@@ -5,7 +5,7 @@ import { detectPlatform } from "@/lib/scraping";
 import { fetchHtml } from "@/lib/scraping/types";
 import { isBlockedSource } from "./blocked-sources";
 import { looksLikeGenericCareersPage } from "./specificity-check";
-import { textIndicatesClosedPosting, textMentionsTitle } from "./freshness-check";
+import { isComparableTitle, textIndicatesClosedPosting, textMentionsTitle } from "./freshness-check";
 import { detectEmbeddedGreenhouseBoard } from "./live-board";
 import { logAnthropicUsage } from "@/lib/observability/llm-usage";
 
@@ -332,7 +332,10 @@ Extract the job details and score the fit.`;
       return { ok: false, error: "Couldn't confidently identify the role and company on that page." };
     }
 
-    if (input.title && !textMentionsTitle(pageText, input.title)) {
+    // isComparableTitle guard: a title in a non-Latin script normalizes to
+    // nothing, so this check can't say anything either way — fail open
+    // instead of rejecting a posting we simply couldn't verify.
+    if (input.title && isComparableTitle(input.title) && !textMentionsTitle(pageText, input.title)) {
       return { ok: false, error: "Couldn't confirm this posting's title actually appears on the page — it may have changed or redirected." };
     }
 

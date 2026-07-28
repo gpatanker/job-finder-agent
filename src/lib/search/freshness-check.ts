@@ -35,6 +35,21 @@ function normalizePhrase(text: string): string {
 }
 
 /**
+ * Whether a title has anything left to compare after normalization —
+ * normalizePhrase strips every non-ASCII character, so a title written
+ * entirely in a non-Latin script (real case: Databricks'
+ * "ソリューションアーキテクト (プリセールス)") reduces to the empty string
+ * and is not something textMentionsTitle can reason about at all. That is a
+ * genuinely different situation from "the caller passed no title", and
+ * callers that fail open on inability-to-verify (isLikelyClosed,
+ * scoreJobUrl) should keep doing so rather than reading a `false` from
+ * textMentionsTitle as evidence the page is stale.
+ */
+export function isComparableTitle(title: string): boolean {
+  return normalizePhrase(title).length > 0;
+}
+
+/**
  * Text-based counterpart to pageMentionsTitle, for callers that already have
  * extracted plain text rather than raw HTML.
  *
@@ -52,10 +67,20 @@ function normalizePhrase(text: string): string {
  * page could coincidentally contain both words for an unrelated role — the
  * real case that motivated the strict check in the first place — so titles
  * with 2 or fewer significant words still require the exact phrase.
+ *
+ * An empty `title` trivially passes (there is nothing to look for, so the
+ * caller isn't asking for anything). A NON-empty title that normalizes to
+ * empty does NOT: it means the title is entirely non-Latin/punctuation and
+ * genuinely uncomparable, and returning true there turned this into a
+ * wildcard that matched anything — the 2026-07-27 bug where Databricks'
+ * "ソリューションアーキテクト (プリセールス)" matched every single target
+ * role phrase in the known-company-board poll. Callers that need
+ * fail-open behavior on an uncomparable title should gate on
+ * isComparableTitle rather than rely on this returning true.
  */
 export function textMentionsTitle(text: string, title: string): boolean {
   const normalizedTitle = normalizePhrase(title);
-  if (!normalizedTitle) return true;
+  if (!normalizedTitle) return title.trim().length === 0;
   const normalizedText = normalizePhrase(text);
   if (normalizedText.includes(normalizedTitle)) return true;
 
@@ -116,7 +141,10 @@ export async function isLikelyClosed(
     if (!res.ok) return false;
     const html = await res.text();
     if (htmlIndicatesClosedPosting(html)) return true;
-    if (title && !pageMentionsTitle(html, title)) return true;
+    // isComparableTitle: an uncomparable (non-Latin-script) title means we
+    // can't run signal 3 at all — fail open rather than treat "couldn't
+    // check" as "the role is gone".
+    if (title && isComparableTitle(title) && !pageMentionsTitle(html, title)) return true;
     return false;
   } catch {
     return false;

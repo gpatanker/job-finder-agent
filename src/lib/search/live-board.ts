@@ -8,7 +8,15 @@ export type AtsBoard =
   | { platform: "greenhouse"; boardToken: string }
   | { platform: "ashby"; orgSlug: string };
 
-export type LiveBoardJob = { title: string; url: string };
+/**
+ * `location` is whatever free text the board itself reports (Greenhouse's
+ * `location.name`, Ashby's `location`) and is often absent — it's carried
+ * through so the known-company-board poll can filter out clearly non-US
+ * postings (real case: "Overview Corporation — Operations Manager -
+ * Guadalajara") and populate the suggestion's location column, which was
+ * previously always null for that channel.
+ */
+export type LiveBoardJob = { title: string; url: string; location?: string };
 
 /**
  * Pure URL parsing, no network — figures out which ATS a candidate's own
@@ -42,11 +50,11 @@ export function detectAtsBoard(url: string): AtsBoard | null {
 }
 
 type GreenhouseJobsResponse = {
-  jobs?: { title?: string; absolute_url?: string }[];
+  jobs?: { title?: string; absolute_url?: string; location?: { name?: string } }[];
 };
 
 type AshbyJobsResponse = {
-  jobs?: { title?: string; jobUrl?: string; applyUrl?: string }[];
+  jobs?: { title?: string; jobUrl?: string; applyUrl?: string; location?: string }[];
 };
 
 /**
@@ -70,8 +78,10 @@ export async function fetchLiveBoardJobs(board: AtsBoard): Promise<LiveBoardJob[
       if (!res.ok) return null;
       const data = (await res.json()) as GreenhouseJobsResponse;
       const jobs = (data.jobs ?? [])
-        .filter((j): j is { title: string; absolute_url: string } => Boolean(j.title && j.absolute_url))
-        .map((j) => ({ title: j.title, url: j.absolute_url }));
+        .filter((j): j is { title: string; absolute_url: string; location?: { name?: string } } =>
+          Boolean(j.title && j.absolute_url)
+        )
+        .map((j) => ({ title: j.title, url: j.absolute_url, location: j.location?.name }));
       return jobs;
     }
 
@@ -82,8 +92,10 @@ export async function fetchLiveBoardJobs(board: AtsBoard): Promise<LiveBoardJob[
     if (!res.ok) return null;
     const data = (await res.json()) as AshbyJobsResponse;
     const jobs = (data.jobs ?? [])
-      .map((j) => ({ title: j.title, url: j.jobUrl ?? j.applyUrl }))
-      .filter((j): j is { title: string; url: string } => Boolean(j.title && j.url));
+      .map((j) => ({ title: j.title, url: j.jobUrl ?? j.applyUrl, location: j.location }))
+      .filter((j): j is { title: string; url: string; location: string | undefined } =>
+        Boolean(j.title && j.url)
+      );
     return jobs;
   } catch {
     return null;

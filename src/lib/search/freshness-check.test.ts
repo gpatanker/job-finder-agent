@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   htmlIndicatesClosedPosting,
+  isComparableTitle,
   isLikelyBotBlocked,
   isLikelyClosed,
   pageMentionsTitle,
+  textMentionsTitle,
 } from "./freshness-check";
 
 describe("htmlIndicatesClosedPosting", () => {
@@ -66,6 +68,38 @@ describe("pageMentionsTitle", () => {
   it("fuzzy match still requires the exact phrase for short, generic titles (avoids false negatives on a company's general listings page)", () => {
     const html = `<body><h2>Business Development Representative</h2><h2>Operations Coordinator</h2></body>`;
     expect(pageMentionsTitle(html, "Operations Manager")).toBe(false);
+  });
+});
+
+describe("isComparableTitle", () => {
+  it("distinguishes 'no title given' from 'title that normalizes to nothing'", () => {
+    expect(isComparableTitle("Business Operations Manager")).toBe(true);
+    expect(isComparableTitle("Analyst 2")).toBe(true);
+    expect(isComparableTitle("")).toBe(false);
+    expect(isComparableTitle("   ")).toBe(false);
+    // normalizePhrase strips every non-ASCII character, so these leave nothing.
+    expect(isComparableTitle("ソリューションアーキテクト (プリセールス)")).toBe(false);
+    expect(isComparableTitle("运营经理")).toBe(false);
+    expect(isComparableTitle("— / —")).toBe(false);
+  });
+});
+
+describe("textMentionsTitle", () => {
+  it(
+    "regression: a non-empty title that normalizes to nothing is NOT a match — it used to hit " +
+      "the 'nothing to look for, trivially true' early return, which made it a wildcard that " +
+      "matched every target role phrase at once (real case: Databricks' " +
+      "\"ソリューションアーキテクト (プリセールス)\" surfaced as a Business Operations match on 2026-07-27)",
+    () => {
+      expect(textMentionsTitle("Business Operations Manager", "ソリューションアーキテクト (プリセールス)")).toBe(false);
+      expect(textMentionsTitle("Revenue Operations Manager", "运营经理")).toBe(false);
+      expect(textMentionsTitle("anything at all", "— / —")).toBe(false);
+    }
+  );
+
+  it("preserves the original 'no title to check for' behavior for a genuinely empty title", () => {
+    expect(textMentionsTitle("anything at all", "")).toBe(true);
+    expect(textMentionsTitle("anything at all", "   ")).toBe(true);
   });
 });
 
@@ -155,6 +189,27 @@ describe("isLikelyClosed", () => {
       )
     ).toBe(false);
   });
+
+  it(
+    "fails open on a title that can't be compared at all (non-Latin script) rather than " +
+      "reading 'couldn't verify' as 'the role is gone'",
+    async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: async () => "<body><h1>ソリューションアーキテクト (プリセールス)</h1></body>",
+        })
+      );
+      expect(
+        await isLikelyClosed(
+          "https://job-boards.greenhouse.io/databricks/jobs/1",
+          "ソリューションアーキテクト (プリセールス)"
+        )
+      ).toBe(false);
+    }
+  );
 
   it("skips the title check entirely when no title is passed (backward compatible)", async () => {
     vi.stubGlobal(
