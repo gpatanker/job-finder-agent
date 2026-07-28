@@ -7,6 +7,21 @@ const STOPWORDS = new Set([
   "across", "within", "about", "other", "than", "also", "more", "most",
   "we're", "we", "they", "their", "them", "its", "it's", "on", "in", "to",
   "of", "a", "an", "is", "as", "at", "by", "or", "be", "not",
+  // Generic connective/filler words common in job-posting prose that pass
+  // the length-3+ filter but carry no signal about the role's requirements
+  // — confirmed live via a short real JD whose top-40 extracted "keywords"
+  // were dominated by words like these instead of actual skills.
+  "does", "did", "was", "were", "been", "being", "do", "each",
+  "same", "bring", "brings", "provide", "provides", "providing", "clear",
+  "stand", "serve", "serves", "powers", "power", "help", "helps", "helping",
+  "make", "makes", "making", "get", "gets", "getting", "take", "takes",
+  "taking", "put", "puts", "see", "sees", "look", "looking", "need", "needs",
+  "want", "wants", "wanting", "like", "likes", "great", "excellent", "good",
+  "best", "new", "high", "highly", "well", "very", "really", "just", "here",
+  "there", "these", "those", "which", "while", "because", "if", "so",
+  "own", "one", "two", "three", "first", "second", "part", "day", "days",
+  "time", "times", "every", "everyone", "someone", "something", "yourself",
+  "us", "please", "include", "includes", "included",
 ]);
 
 export function extractKeywords(text: string, limit = 40): string[] {

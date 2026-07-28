@@ -7,6 +7,7 @@ import { applyTailoring } from "@/lib/resume/apply-tailoring";
 import { renderResumePdf } from "@/lib/resume/render-pdf";
 import { resumeSlugForJob } from "@/lib/resume/slug";
 import { uploadResumePdf } from "@/lib/storage/resumes";
+import { fetchJobPostingText } from "@/lib/search/fetch-posting-text";
 
 export async function POST(
   _request: NextRequest,
@@ -30,7 +31,16 @@ export async function POST(
     );
   }
 
-  const context = [job.jobDescription, job.roleFamily, job.resumeAngle, job.title, job.company]
+  // Backfill for jobs promoted before the fetch was added at promote-time
+  // (or where that fetch failed) — without this, tailoring/coverage
+  // scoring falls back to scoring against `resumeAngle`, a 1-2 sentence
+  // marketing blurb, not the job's actual requirements text.
+  let jobDescription = job.jobDescription;
+  if (!jobDescription && job.applyUrl) {
+    jobDescription = await fetchJobPostingText(job.applyUrl).catch(() => null);
+  }
+
+  const context = [jobDescription, job.roleFamily, job.resumeAngle, job.title, job.company]
     .filter(Boolean)
     .join("\n");
 
@@ -47,6 +57,7 @@ export async function POST(
   const [updated] = await db
     .update(jobs)
     .set({
+      jobDescription,
       tailoredResumeSlug: slug,
       tailoredResumeFileName: fileName,
       tailoredResumeGeneratedAt: new Date(),

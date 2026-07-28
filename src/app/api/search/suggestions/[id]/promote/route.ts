@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { jobSearchSuggestions, jobs } from "@/lib/db/schema";
+import { fetchJobPostingText } from "@/lib/search/fetch-posting-text";
 
 export async function POST(
   _request: NextRequest,
@@ -33,6 +34,17 @@ export async function POST(
     );
   }
 
+  // The suggestion only ever carried a 1-2 sentence LLM-written rationale,
+  // never the actual posting text — fetch the real job description now so
+  // resume tailoring/coverage scoring (src/lib/resume/*) has real
+  // requirements text to work against instead of scoring a resume against
+  // marketing-blurb prose. Fails open (leaves jobDescription null) on any
+  // fetch error rather than blocking promotion on a scraping failure —
+  // generate-resume falls back to resumeAngle when this is null.
+  const jobDescription = suggestion.applyUrl
+    ? await fetchJobPostingText(suggestion.applyUrl).catch(() => null)
+    : null;
+
   const [job] = await db
     .insert(jobs)
     .values({
@@ -41,6 +53,7 @@ export async function POST(
       location: suggestion.location,
       workMode: suggestion.workMode,
       applyUrl: suggestion.applyUrl,
+      jobDescription,
       salaryText: suggestion.salaryText,
       matchScore: suggestion.matchScore,
       resumeAngle: suggestion.rationale,
