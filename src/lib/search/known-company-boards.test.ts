@@ -67,18 +67,35 @@ describe("classifyRoleFamily", () => {
       ["Founding Biz Ops Lead", "core"],
       ["GTM Strategy & Operations", "core"],
       ["Business Operations Analyst (Starlink)", "core"],
-      ["Strategic Finance - Business Operations Lead", "core"],
       ["Compute Strategy & Operations Lead", "strategy-ops"],
       ["Pricing Strategy & Operations", "strategy-ops"],
       ["Sales Operations Manager, New Business", "core"],
       ["Product Operations Manager", "adjacent"],
-      ["Sr. Manager, Growth Marketing Operations", "adjacent"],
       ["Technical Operations Manager", "adjacent"],
     ];
     for (const [title, tier] of shouldMatch) {
       expect(classifyRoleFamily(title), title).toBe(tier);
     }
   });
+
+  it(
+    "finance and marketing are hard exclusions (2026-07-28), even paired with a core domain " +
+      "word — the candidate confirmed neither aligns with what he does, regardless of also " +
+      "naming Business Operations/Strategy/GTM in the same title",
+    () => {
+      const excluded = [
+        "Strategic Finance - Business Operations Lead", // Snowflake — actually applied to before this rule existed
+        "Manager, Strategic Finance & Business Operations", // Verkada — same
+        "FP&A Manager, Business Operations",
+        "Finance Operations Analyst",
+        "Sr. Manager, Growth Marketing Operations", // Pendo — actually applied to before this rule existed
+        "Marketing Strategy & Operations Manager",
+      ];
+      for (const title of excluded) {
+        expect(classifyRoleFamily(title), title).toBeNull();
+      }
+    }
+  );
 
   it(
     "root cause 1: a bare, unqualified 'Operations Manager' no longer matches — the old " +

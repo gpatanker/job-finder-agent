@@ -90,7 +90,6 @@ const CORE_DOMAINS = [
  */
 const ADJACENT_DOMAINS = [
   "sales",
-  "marketing",
   "growth",
   "partner",
   "partners",
@@ -141,6 +140,13 @@ const DISQUALIFYING_DOMAINS = [
   // Other functions that borrow "operations"
   "data operations", "labeling", "annotation", "lifecycle", "hardware",
   "research operations", "legal operations", "flight", "aviation", "maritime",
+  // Finance and marketing — hard exclusions, not softer ADJACENT_DOMAINS
+  // qualifiers, even when paired with "business"/"operations"/"strategy"
+  // (confirmed 2026-07-28: "Strategic Finance - Business Operations Lead"
+  // and "Manager, Strategic Finance & Business Operations" are explicitly
+  // out of scope despite both naming a core domain).
+  "finance", "financial", "accounting", "fp a",
+  "marketing",
   // Level, not domain, but never worth surfacing
   "intern", "internship", "apprentice",
 ] as const;
