@@ -147,6 +147,54 @@ const DISQUALIFYING_DOMAINS = [
   // out of scope despite both naming a core domain).
   "finance", "financial", "accounting", "fp a",
   "marketing",
+  // Corporate Development / M&A — a distinct deal-sourcing/integration
+  // specialization the candidate has no experience in, not a synonym for
+  // BizOps despite sharing the word "corporate" (a CORE_DOMAINS word) and
+  // often pairing with "operation(s)". Confirmed 2026-07-28 real case:
+  // "Corporate Development Operation & M&A Integration Lead" (Snowflake)
+  // scored 82 and got surfaced for promotion — "corporate" + "operation"
+  // was enough to pass the structural test despite this being nothing like
+  // the candidate's actual function.
+  "corporate development", "m a", "mergers and acquisitions", "merger integration",
+  // Quota-carrying / customer-facing sales IC roles — a different profession
+  // from Sales *Operations*, which stays in scope via ADJACENT_DOMAINS.
+  // These kept slipping through because "Strategic Account Executive" pairs
+  // "strategic" with "commercial"/"sales", and because an AE title need not
+  // contain the word "finance" to be a finance-vertical sales role. Confirmed
+  // 2026-07-28 real cases: "Strategic Account Executive, Retail & Commercial
+  // Banking - FSI" (Anthropic), "Manager, Account Executive - Strategic
+  // Sales" (Anthropic), "Strategic Account Executive, New Vertical Sales"
+  // (Flex), "Sales Manager, Strategic Accounts" (Ripple).
+  "account executive", "account executives", "account manager", "account managers",
+  // Sales/business development rep pipeline-generation roles. Short forms are
+  // safe here because hasAny is space-bounded, so a bare "sdr"/"bdr" token
+  // can't match inside a longer word. Confirmed 2026-07-28: "Strategic Sales
+  // Development Representative, Robotics & Automotive" (Scale AI).
+  "sales development representative", "business development representative",
+  "sales development rep", "business development rep", "sdr", "bdr",
+  // Hands-on engineering / technical IC roles. The candidate is explicit that
+  // "pure engineering does not align with what I do" — and these are not
+  // caught by the structural test, because a data-center or systems
+  // engineering title routinely also names "Operations" plus an
+  // ADJACENT_DOMAINS word (infrastructure, data center, technical).
+  // Confirmed 2026-07-28: "Sales Systems Engineer, Enterprise Operations"
+  // (Perplexity), "Global Operations Engineer (Product & Change Management)"
+  // (SpaceX), "Infrastructure Engineer (Data Center Operations)" (Cerebras),
+  // "Quality Engineer - Rack Infrastructure & Site Operations" (OpenAI),
+  // "AI Field Engineer - Strategic Partnerships" (Fireworks AI), "Data Center
+  // Operations Systems Engineer" (Lambda). Deliberately just "engineer(s)",
+  // not the broader "engineering" — all confirmed real cases are "...
+  // Engineer" IC titles, and the broader form would also exclude a
+  // legitimate BizOps-for-the-engineering-org title like "Engineering
+  // Strategy & Operations Manager", which isn't evidenced as unwanted.
+  // "Infrastructure Operations" and "AI Infrastructure Operations" are the
+  // candidate's own role families and stay in scope, as does "Technical
+  // Program Manager", which contains neither word.
+  "engineer", "engineers",
+  // "Network Operations" is already excluded above under IT/NOC, but the
+  // singular operator form is a different string and slipped through:
+  // "Network Operator, Data Center Operations" (Fluidstack, 2026-07-28).
+  "network operator", "network operators",
   // Level, not domain, but never worth surfacing
   "intern", "internship", "apprentice",
 ] as const;
@@ -207,7 +255,18 @@ export function classifyRoleFamily(jobTitle: string): RoleFamilyTier {
 
   if (hasStrategy) {
     if (hasCore) return "strategy";
-    if (hasAdjacent) return "adjacent";
+    // Deliberately NOT "if (hasAdjacent) return 'adjacent'" here — without
+    // "operations"/"ops" also present, "strategic" is very often just an
+    // adjective on a different noun (an account tier, a sales motion, a
+    // partnership), not a signal that the role itself is a strategy
+    // function. Confirmed 2026-07-28 real false positives: "Sales Manager,
+    // Strategic Accounts" (Ripple), "Strategic Account Executive, Retail &
+    // Commercial Banking" (Anthropic), "Strategic Customer Success Manager"
+    // (Ashby/SentiLink), "Strategic Sourcing Manager, Compute" (OpenAI) —
+    // all pure sales/CS/procurement IC roles that only qualified because an
+    // ADJACENT_DOMAINS word (sales, customer success, infrastructure) was
+    // also present. hasCore above is a much stronger requirement (business,
+    // revenue, gtm, commercial, corporate) and is unaffected by this.
   }
 
   return null;

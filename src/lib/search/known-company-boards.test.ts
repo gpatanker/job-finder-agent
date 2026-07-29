@@ -98,6 +98,82 @@ describe("classifyRoleFamily", () => {
   );
 
   it(
+    "corporate development / M&A is a hard exclusion (2026-07-28) despite 'corporate' being a " +
+      "core domain word and these titles usually also naming 'operation(s)'",
+    () => {
+      const excluded = [
+        "Corporate Development Operation & M&A Integration Lead", // Snowflake — scored 82 before this rule
+        "Product Strategy and Corporate Development Lead, AI", // Datadog
+        "Manager, M&A Integration & Business Operations",
+        "Mergers and Acquisitions Operations Lead",
+      ];
+      for (const title of excluded) {
+        expect(classifyRoleFamily(title), title).toBeNull();
+      }
+    }
+  );
+
+  it(
+    "quota-carrying / customer-facing sales IC titles are excluded (2026-07-28) even when " +
+      "'Strategic' pairs with a core domain word like 'Commercial' — Sales/Revenue/Partner " +
+      "*Operations* is a different thing and stays in scope",
+    () => {
+      const excluded = [
+        "Strategic Account Executive, Retail & Commercial Banking - FSI", // Anthropic
+        "Manager, Account Executive - Strategic Sales", // Anthropic
+        "Strategic Account Executive, New Vertical Sales", // Flex
+        "Sales Manager, Strategic Accounts", // Ripple
+        "Strategic Sales Development Representative, Robotics & Automotive", // Scale AI
+        "Business Development Representative, Enterprise",
+        "Commercial Account Manager, Strategic Operations",
+        "SDR Manager, Business Operations",
+      ];
+      for (const title of excluded) {
+        expect(classifyRoleFamily(title), title).toBeNull();
+      }
+      // The ops function behind the sales org is still the candidate's job.
+      expect(classifyRoleFamily("Sales Operations Manager - Enterprise")).toBe("adjacent");
+      expect(classifyRoleFamily("Revenue Operations Manager")).toBe("core");
+      expect(classifyRoleFamily("Partner Operations Lead")).toBe("adjacent");
+    }
+  );
+
+  it(
+    "hands-on engineering / technical IC titles are excluded (2026-07-28) — an '...Engineer' " +
+      "title routinely also names Operations plus an adjacent domain, so the structural test " +
+      "alone let them through",
+    () => {
+      const excluded = [
+        "Sales Systems Engineer, Enterprise Operations", // Perplexity
+        "Global Operations Engineer (Product & Change Management)", // SpaceX
+        "Infrastructure Engineer (Data Center Operations)", // Cerebras
+        "Quality Engineer - Rack Infrastructure & Site Operations - Stargate", // OpenAI
+        "AI Field Engineer - Strategic Partnerships", // Fireworks AI
+        "Data Center Operations Systems Engineer (Kansas City, MO)", // Lambda
+        "Data Center Operations System Engineer III (Chicago)", // Lambda
+        "Infrastructure Ops Engineer", // Baseten
+        "Network Operator, Data Center Operations", // Fluidstack — "network operations" didn't catch the singular
+      ];
+      for (const title of excluded) {
+        expect(classifyRoleFamily(title), title).toBeNull();
+      }
+      // Same domains, non-engineer titles — these are the candidate's own
+      // stated role families and must survive the exclusion above. This is
+      // deliberately "engineer(s)", not the broader "engineering" — a title
+      // like "Engineering Operations Manager" is a BizOps-for-the-
+      // engineering-org role, not a hands-on IC engineer title, and isn't
+      // evidenced as unwanted (2026-07-28: narrowed from an initial
+      // "engineering"-wide exclusion after review).
+      expect(classifyRoleFamily("Senior Technical Program Manager – AI Infrastructure, Site Operations")).toBe(
+        "adjacent"
+      );
+      expect(classifyRoleFamily("AI Infrastructure Operations Manager")).toBe("adjacent");
+      expect(classifyRoleFamily("Business Operations Manager, Data Center Strategy")).toBe("core");
+      expect(classifyRoleFamily("Engineering Operations Manager, Business Systems")).toBe("core");
+    }
+  );
+
+  it(
     "root cause 1: a bare, unqualified 'Operations Manager' no longer matches — the old " +
       "phrase pool contained the 2-word synonym 'Operations Manager', which textMentionsTitle's " +
       "exact-substring fast path found inside ANY '<something> Operations Manager'",
@@ -276,7 +352,7 @@ describe("discoverFromKnownCompanyBoards", () => {
     expect(candidates[0].rationale).toContain("Strategy & Operations match");
   });
 
-  it("excludes over-senior titles (Director/Head of/VP) even if the title otherwise matches", async () => {
+  it("excludes over-senior titles (Director/Head of/VP/Principal) even if the title otherwise matches", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -286,6 +362,13 @@ describe("discoverFromKnownCompanyBoards", () => {
             {
               title: "Head of Business Operations",
               absolute_url: "https://job-boards.greenhouse.io/acme/jobs/1",
+            },
+            {
+              // Fluidstack, 2026-07-28 — classifies as a real ops family
+              // ("operations" + "data center"), so only the shared
+              // isOverSeniorTitle backstop keeps it out.
+              title: "Principal Electrical Operations Lead — Data Center Operations",
+              absolute_url: "https://job-boards.greenhouse.io/acme/jobs/2",
             },
           ],
         }),

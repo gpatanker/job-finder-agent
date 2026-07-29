@@ -61,10 +61,23 @@ describe("isOverSeniorTitle", () => {
     }
   );
 
+  it(
+    "regression: 'Principal' is also above the ceiling (confirmed 2026-07-28 — the candidate " +
+      "rejected Assort Health's \"Principal, Strategic Partnerships (Health Systems)\" and " +
+      "Fluidstack's \"Principal Electrical Operations Lead\" as too senior)",
+    () => {
+      expect(isOverSeniorTitle("Principal, Strategic Partnerships (Health Systems)")).toBe(true);
+      expect(isOverSeniorTitle("Principal Electrical Operations Lead — Data Center Operations")).toBe(true);
+      expect(isOverSeniorTitle("Principal, GTM Strategy")).toBe(true);
+      expect(isOverSeniorTitle("Principal Business Operations Manager")).toBe(true);
+    }
+  );
+
   it("does not flag titles at or below the candidate's reach", () => {
     expect(isOverSeniorTitle("Senior Manager, Business Operations")).toBe(false);
     expect(isOverSeniorTitle("Manager, Strategy & Operations")).toBe(false);
     expect(isOverSeniorTitle("Business Operations Lead")).toBe(false);
-    expect(isOverSeniorTitle("Principal, GTM Strategy")).toBe(false);
+    // Staff-level is still in reach; only Principal-and-above moved out.
+    expect(isOverSeniorTitle("Staff Strategy & Operations Lead")).toBe(false);
   });
 });
