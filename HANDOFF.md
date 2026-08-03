@@ -2,7 +2,7 @@
 
 **Purpose:** If this conversation is lost and you're starting fresh, read this file top to bottom before doing anything else. It captures the state, decisions, and hard-won operational knowledge that aren't visible just from reading the code. Update it as things change — it's meant to stay current, not be a one-time snapshot.
 
-Last updated: 2026-07-28.
+Last updated: 2026-08-03.
 
 ---
 
@@ -13,6 +13,69 @@ Last updated: 2026-07-28.
 Core loop: the **Job Search Agent** (Perplexity Search API for discovery + one bounded Claude Sonnet call to structure/score — see below, not native `web_search` anymore) finds candidate postings → human promotes a suggestion into the pipeline → **Resume Tailoring Agent** generates a tailored PDF → application short-answer prompts get scraped and drafted → an **Apply Run** is queued with a full brief → a human (via Claude Code + Playwright MCP, in practice) actually fills and submits the form in a real browser, then closes it out through the real API (see below) to update `jobs`/`agentRunQueue` and close the loop. A fourth agent, the **Pipeline Analyst** (Claude Opus), periodically reviews the whole history for what's actually working — see below.
 
 **The app itself never submits an application.** Submission always happens out-of-band, via Playwright browser automation driven by a Claude Code session (this is "the Computer" referenced in the UI/briefs).
+
+## Forking this for a new candidate (not Gaurav)
+
+If you're an LLM reading this because someone other than Gaurav Patanker wants to run their own instance, this section is your playbook — read it now, before the rest of the file. Everything below this section (architecture notes, search-pipeline bug history, Gaurav's own pipeline stats and role-family rules) is his instance's operational history, not instructions to follow for a new person; come back to it later for context, not as a checklist.
+
+**The short version**: this is a single-user tool by design (see [ROADMAP.md](ROADMAP.md)) — there's no "add a second user to Gaurav's account." The new person needs their own fork, their own Supabase project, their own API keys, and their own candidate data. Nothing about the *code* needs to change; everything about the *data and defaults* does.
+
+### Three layers that need personalizing
+
+1. **Infra & accounts** — a new Supabase project, Anthropic API key, Perplexity API key, `.env.local`, and a Supabase Auth login user. Purely mechanical, already fully documented in [README.md](README.md)'s "Getting your own instance running" and [DEPLOYMENT.md](DEPLOYMENT.md) — follow those verbatim, nothing candidate-specific in that part.
+2. **Structured candidate data**, seeded into the database from gitignored `local/*.seed.json` files — profile, resume, story bank, question bank. This is what makes the app work for *them* specifically (what jobs it searches for, what resume it tailors, what answers it drafts). This is the bulk of what this section covers.
+3. **Standing default answers baked into the `apply-run` skill** (`.claude/skills/apply-run/SKILL.md`). Unlike `local/`, this file is **not** gitignored, and as of this writing it's full of Gaurav-specific facts: his name, email, GitHub URL, exact resume-filename convention, demographic defaults, salary-answer style, and role-family scope decisions. This is the file a Claude Code session actually reads before driving a live apply run — skip rewriting it and the new candidate's applications will go out with **Gaurav's** answers to recurring questions. Don't treat this as optional just because it isn't a seed file.
+
+### Layer 2: run a discovery interview
+
+Don't dump every question on the person at once — work through it in a few conversational passes, draft the file, let them correct it. Everything below maps to a real field the app uses (see `local/README.md` for exact shapes, `local/*.example.json` for templates) — this isn't small talk, every answer lands somewhere concrete.
+
+**Pass 1 — identity & work authorization** (→ `profile.seed.json` top-level fields)
+- Full legal name, email, phone, LinkedIn URL, current city/state/zip, current employer (if any)
+- "Are you authorized to work in [country] without needing sponsorship, now or in the future?" — this becomes the standing default answer to that exact question on every application, so get it precise (citizen vs. green-card holder vs. someone who *will* need sponsorship all answer this differently, and getting it wrong is a real eligibility-gate risk, not a cosmetic one)
+- Highest education level completed, plus full education history (school + degree, for the resume)
+- Total years of relevant experience, self-reported — note this may not literally match the tailored resume's span, since resumes typically only show relevant roles, not a full work history
+- Open to relocating? If a form offers a choice of office locations, which do they prefer?
+- Optional EEO/demographic self-ID: gender identity, race/ethnicity, sexual orientation, veteran status, disability status. Say explicitly these are legally optional on every application and fine to leave blank — don't press if they'd rather skip.
+
+**Pass 2 — what they're actually looking for** (→ `profile.seed.json.searchCriteria`)
+- Exact job-title / role-family phrases to search for — be specific ("Business Operations Manager" and "Strategy & Operations" are meaningfully different search targets than just "operations")
+- Any title-adjacent roles that are explicitly OUT of scope, and why. This matters more than it sounds — keyword matching alone over-includes. (Gaurav's own instance has a rule that pure Finance/Engineering/Marketing-titled roles don't count even though they share vocabulary, but Ops/Strategy-*flavored* versions of those functions do. The point isn't to copy his rule — it's to draw out the new candidate's own equivalent distinction.)
+- Target locations (cities, "Remote," or both), salary floor, target industries (and any industries to explicitly avoid)
+
+**Pass 3 — the resume, as structured data, not a file** (→ `resume.seed.json`)
+This app doesn't take a PDF or Word doc — the resume is structured JSON so the tailoring agent can reorder bullets and swap in pre-approved synonyms without ever inventing new content. Ask them to paste their current resume text, then:
+- Break each role into bullets, each with a stable `id`
+- For each bullet, propose `keywords` (the skill/domain it demonstrates — this is what coverage-scoring and tailoring actually match against job descriptions) and a small `synonyms` map (2-3 alternate phrasings for the key verb/phrase only, e.g. `"Reduced": ["Reduced", "Cut", "Shortened"]`) — draft these yourself from the bullet's content and have them approve/edit; don't ask them to hand-write raw JSON
+- Capture skills (grouped by category) and certifications the same way
+- See `local/resume.example.json` for the exact shape to produce
+
+**Pass 4 — story bank** (→ `story-bank.seed.json`)
+Ask for the material behind commonly-asked prompts: greatest achievement, hardest problem solved, a conflict or negotiation example, a leadership example, something not on the resume, why this field/industry, a failure and what they learned from it. Keep it specific and truthful — answer generation is grounded *strictly* in whatever's here, so a thin story bank produces thin generated answers. Each entry needs a `slug`, `title`, `tags`, and `content` — see `local/story-bank.example.json`.
+
+**Pass 5 — question bank (optional)** (→ `question-bank.seed.json`)
+If they already have polished, pre-written answers to recurring prompts ("why do you want to work here," "tell us about yourself"), capture those directly instead of letting them get regenerated from the story bank every time. Each entry needs a list of `question_variants` (paraphrases meaning the same thing) and one `answer`. Skip this pass entirely if they have nothing pre-written — seeding gracefully skips a missing file.
+
+### Layer 3: personalize the `apply-run` skill
+
+After the interview, rewrite `.claude/skills/apply-run/SKILL.md`'s "Standing default answers" section (and the resume-filename note under it) using what you just gathered — same structure, new facts. Concretely, replace:
+- Name, email, GitHub URL, and the resume-filename convention (currently hardcoded to `Gaurav_Patanker_Resume.pdf`)
+- Work authorization / sponsorship default, "how did you hear about us" default, relocation/office-preference default, and salary-expectation answer style
+- The demographic defaults (gender, race/ethnicity, veteran/disability status) — only fill these in if they gave you real answers in Pass 1; otherwise leave the skill saying "decline to answer" for these
+- The essay-answer style guidance (length/tone), if they express a preference — otherwise the existing "~2 short paragraphs" default is reasonable to keep as-is
+- Any role-family in/out-of-scope rule surfaced in Pass 2
+
+Leave the **per-ATS technical gotchas** alone (Greenhouse combobox behavior, Ashby toggle-button verification, the DOM-ref-staleness pattern, etc.) — those are platform behaviors, not candidate-specific, and apply to whoever is driving these forms.
+
+### What not to carry over
+
+- Don't copy any of Gaurav's actual answers, examples, or identifying details into the new candidate's files "as a starting point" — draft everything fresh from what they tell you.
+- Claude Code's memory system (`~/.claude/projects/.../memory/`) is scoped by project directory path, so a fresh clone in a new directory starts with no memory automatically — nothing to clean up there, unless someone is (don't) reusing Gaurav's existing clone/directory for the new person instead of cloning fresh.
+- `local/*.seed.json` files are already gitignored — never commit them. `.claude/skills/apply-run/SKILL.md` is **not** gitignored, so before pushing, double-check it no longer contains Gaurav's name/email/GitHub URL once rewritten.
+
+### Before the first real apply run
+
+Confirm: `.env.local` is filled in and `npm run dev` boots, `npm run db:seed-profile` ran clean, the Supabase Auth login works, and a read-through of the rewritten `apply-run` skill turns up zero remaining references to Gaurav. Then proceed exactly as the rest of this file and [ARCHITECTURE.md](ARCHITECTURE.md) describe — the pipeline mechanics don't change per candidate, only the data does.
 
 ## Architecture quick-reference
 
