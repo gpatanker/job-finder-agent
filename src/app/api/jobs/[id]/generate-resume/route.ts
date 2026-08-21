@@ -9,6 +9,11 @@ import { resumeSlugForJob } from "@/lib/resume/slug";
 import { uploadResumePdf } from "@/lib/storage/resumes";
 import { fetchJobPostingText } from "@/lib/search/fetch-posting-text";
 
+// Long-running: LLM calls plus network verification. Without this the
+// platform's short default duration kills the function mid-run and returns an
+// HTML error the client can't parse as JSON. See search/run for measurements.
+export const maxDuration = 300;
+
 export async function POST(
   _request: NextRequest,
   ctx: RouteContext<"/api/jobs/[id]/generate-resume">

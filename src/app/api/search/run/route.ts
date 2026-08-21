@@ -6,6 +6,16 @@ import { findJobCandidates, type JobCandidate } from "@/lib/search/job-search-ag
 import { resolveCandidateFreshness, type LiveBoardCache } from "@/lib/search/resolve-freshness";
 import { discoverFromKnownCompanyBoards } from "@/lib/search/known-company-boards";
 
+// A full run is Perplexity discovery -> one ~98k-input-token Claude
+// structuring call (~46s on its own) -> per-candidate live-board freshness
+// checks, optionally twice when the widen pass fires. Measured end-to-end at
+// ~2m23s on 2026-08-20. Without this, Vercel's short default duration kills
+// the function right after discovery and returns an HTML 504, which the
+// client then fails to parse as JSON ("The string did not match the expected
+// pattern." in Safari). 300 is the platform ceiling; hosts that allow less
+// clamp it down rather than erroring.
+export const maxDuration = 300;
+
 const TARGET_NEW_SUGGESTIONS = 20;
 const MAX_WIDEN_PASSES = 1;
 // Was 2 when a single prolific company could crowd out a thin run. A

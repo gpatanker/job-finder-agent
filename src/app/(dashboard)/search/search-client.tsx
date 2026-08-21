@@ -21,6 +21,28 @@ export function SearchClient({
   const [scoring, setScoring] = useState(false);
   const [cleaning, setCleaning] = useState(false);
 
+  /**
+   * These routes are long-running, so a timed-out or crashed serverless
+   * invocation answers with an HTML error page rather than JSON. Calling
+   * res.json() on that throws an opaque parser error ("The string did not
+   * match the expected pattern." in Safari) that reads like a client bug,
+   * which is what masked a plain function timeout. Report the transport
+   * failure instead.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function readJson(res: Response, fallback: string): Promise<any> {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(
+        res.ok
+          ? `${fallback}: the server sent a non-JSON response (HTTP ${res.status}).`
+          : `${fallback}: HTTP ${res.status}${res.status === 504 ? " — the request timed out server-side." : ""}`
+      );
+    }
+  }
+
   async function handleScoreUrl(e: FormEvent) {
     e.preventDefault();
     if (!urlInput.trim()) return;
@@ -31,7 +53,7 @@ export function SearchClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: urlInput.trim() }),
       });
-      const body = await res.json();
+      const body = await readJson(res, "Failed to score that posting");
       if (!res.ok) throw new Error(body.error ?? "Failed to score that posting");
       setSuggestions((s) => [body.suggestion, ...s]);
       setUrlInput("");
@@ -47,7 +69,7 @@ export function SearchClient({
     setRunning(true);
     try {
       const res = await fetch("/api/search/run", { method: "POST" });
-      const body = await res.json();
+      const body = await readJson(res, "Search failed");
       if (!res.ok) throw new Error(body.error ?? "Search failed");
       setSuggestions(body.suggestions);
       if (body.warning) toast.warning(body.warning);
@@ -82,7 +104,7 @@ export function SearchClient({
     setCleaning(true);
     try {
       const res = await fetch("/api/search/clean", { method: "POST" });
-      const body = await res.json();
+      const body = await readJson(res, "Cleanup failed");
       if (!res.ok) throw new Error(body.error ?? "Cleanup failed");
       setSuggestions(body.suggestions);
       const notes = [

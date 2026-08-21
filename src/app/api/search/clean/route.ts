@@ -4,6 +4,11 @@ import { db } from "@/lib/db/client";
 import { jobSearchSuggestions } from "@/lib/db/schema";
 import { resolveCandidateFreshness, type LiveBoardCache } from "@/lib/search/resolve-freshness";
 
+// Long-running: LLM calls plus network verification. Without this the
+// platform's short default duration kills the function mid-run and returns an
+// HTML error the client can't parse as JSON. See search/run for measurements.
+export const maxDuration = 300;
+
 /**
  * Re-validates every currently-suggested ("new") job posting against the
  * same checks applied to brand-new candidates (api/search/run) — postings

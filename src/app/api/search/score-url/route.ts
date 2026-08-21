@@ -4,6 +4,11 @@ import { db } from "@/lib/db/client";
 import { candidateProfile, jobs, jobSearchSuggestions, resumeProfile } from "@/lib/db/schema";
 import { scoreJobUrl } from "@/lib/search/score-job-url";
 
+// Long-running: LLM calls plus network verification. Without this the
+// platform's short default duration kills the function mid-run and returns an
+// HTML error the client can't parse as JSON. See search/run for measurements.
+export const maxDuration = 300;
+
 function normalize(company: string, title: string): string {
   return `${company}|${title}`.toLowerCase().replace(/\s+/g, " ").trim();
 }
