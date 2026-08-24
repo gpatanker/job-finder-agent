@@ -94,16 +94,44 @@ export function isOverSeniorTitle(title: string): boolean {
   return OVER_SENIOR_TITLE_REGEX.test(title);
 }
 
-export function computeOverrepresentedCompanies(knownJobs: { company: string; title: string }[]): string[] {
+function countByCompany(knownJobs: { company: string }[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const j of knownJobs) {
     const key = j.company.trim();
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  return [...counts.entries()]
+  return counts;
+}
+
+export function computeOverrepresentedCompanies(knownJobs: { company: string; title: string }[]): string[] {
+  return [...countByCompany(knownJobs).entries()]
     .filter(([, count]) => count >= OVERREPRESENTED_THRESHOLD)
     .sort((a, b) => b[1] - a[1])
     .map(([company, count]) => `${company} (${count} prior suggestions)`);
+}
+
+/**
+ * Same threshold as computeOverrepresentedCompanies, but as raw company names
+ * rather than prompt-facing labels.
+ *
+ * The formatted version only ever reaches the Claude prompt, so it can only
+ * influence the Perplexity+Claude channel. Board polling
+ * (discoverFromKnownCompanyBoards) builds candidates directly and never sees
+ * that prompt, which left the only anti-concentration guard structurally
+ * unable to touch it. Measured over 2026-08-11..20: board polling produced 46
+ * of 76 suggestions and every single cross-day repeat company — Anthropic 7/7
+ * from boards, Anduril 6/6, DoorDash 3/3. This export is what lets the board
+ * channel apply the same rule.
+ */
+export function computeOverrepresentedCompanyNames(
+  knownJobs: { company: string }[],
+  threshold: number = OVERREPRESENTED_THRESHOLD
+): Set<string> {
+  return new Set(
+    [...countByCompany(knownJobs).entries()]
+      .filter(([, count]) => count >= threshold)
+      .map(([company]) => company)
+  );
 }
 
 /**

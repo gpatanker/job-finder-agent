@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeOverrepresentedCompanies, isOverSeniorTitle } from "./job-search-agent";
+import {
+  computeOverrepresentedCompanies,
+  computeOverrepresentedCompanyNames,
+  isOverSeniorTitle,
+} from "./job-search-agent";
 
 describe("computeOverrepresentedCompanies", () => {
   it(
@@ -79,5 +83,57 @@ describe("isOverSeniorTitle", () => {
     expect(isOverSeniorTitle("Business Operations Lead")).toBe(false);
     // Staff-level is still in reach; only Principal-and-above moved out.
     expect(isOverSeniorTitle("Staff Strategy & Operations Lead")).toBe(false);
+  });
+});
+
+describe("computeOverrepresentedCompanyNames", () => {
+  it(
+    "returns raw names at the same threshold as the prompt-facing version, so the board-polling " +
+      "channel can apply the rule it previously bypassed entirely",
+    () => {
+      const knownJobs = [
+        { company: "Anthropic", title: "TPM, Compute" },
+        { company: "Anthropic", title: "Strategy & Ops Manager" },
+        { company: "Anthropic", title: "Commercial Ops PM" },
+        { company: "OpenAI", title: "Business Operations Manager" },
+      ];
+      expect(computeOverrepresentedCompanyNames(knownJobs)).toEqual(new Set(["Anthropic"]));
+    }
+  );
+
+  it("stays consistent with the formatted variant on the same input", () => {
+    const knownJobs = [
+      { company: "Acme", title: "A" },
+      { company: "Acme", title: "B" },
+      { company: "Acme", title: "C" },
+      { company: "Widgets Inc", title: "D" },
+    ];
+    const names = computeOverrepresentedCompanyNames(knownJobs);
+    const labels = computeOverrepresentedCompanies(knownJobs);
+    expect([...names]).toEqual(labels.map((l) => l.replace(/ \(\d+ prior suggestions\)$/, "")));
+  });
+
+  it(
+    "accepts a higher threshold for the board-polling hard skip — reusing the soft prompt " +
+      "threshold of 3 would have skipped 56% of all 161 pollable boards, vs 29% at 5",
+    () => {
+      const knownJobs = [
+        ...Array.from({ length: 4 }, (_, i) => ({ company: "FourTimes", title: `T${i}` })),
+        ...Array.from({ length: 5 }, (_, i) => ({ company: "FiveTimes", title: `T${i}` })),
+      ];
+      expect(computeOverrepresentedCompanyNames(knownJobs)).toEqual(
+        new Set(["FourTimes", "FiveTimes"])
+      );
+      expect(computeOverrepresentedCompanyNames(knownJobs, 5)).toEqual(new Set(["FiveTimes"]));
+    }
+  );
+
+  it("trims whitespace so ' Acme' and 'Acme' count as one company", () => {
+    const knownJobs = [
+      { company: "Acme", title: "A" },
+      { company: " Acme", title: "B" },
+      { company: "Acme ", title: "C" },
+    ];
+    expect(computeOverrepresentedCompanyNames(knownJobs)).toEqual(new Set(["Acme"]));
   });
 });

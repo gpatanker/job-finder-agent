@@ -352,6 +352,87 @@ describe("discoverFromKnownCompanyBoards", () => {
     expect(candidates[0].rationale).toContain("Strategy & Operations match");
   });
 
+  it(
+    "regression: skips boards for companies already at the overrepresentation threshold — this " +
+      "channel re-polls every known board every run, so over 2026-08-11..20 it produced every " +
+      "cross-day repeat company (Anthropic 7/7 from boards, Anduril 6/6, DoorDash 3/3)",
+    async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          jobs: [
+            {
+              title: "Business Operations Manager",
+              absolute_url: "https://job-boards.greenhouse.io/acme/jobs/1",
+            },
+          ],
+        }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const candidates = await discoverFromKnownCompanyBoards({
+        known: [
+          { company: "Acme", applyUrl: "https://job-boards.greenhouse.io/acme/jobs/999" },
+          { company: "Widgets", applyUrl: "https://job-boards.greenhouse.io/widgets/jobs/999" },
+        ],
+        roleFamilies: ROLE_FAMILIES,
+        skipCompanies: new Set(["Acme"]),
+      });
+
+      expect(candidates.every((c) => c.company !== "Acme")).toBe(true);
+      expect(candidates.map((c) => c.company)).toEqual(["Widgets"]);
+      // The skipped board must not even be fetched — the point is to stop
+      // spending the request, not just to filter the result afterwards.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("caps returned candidates at maxCandidates, keeping the highest-scoring ones", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          jobs: [
+            {
+              title: "Business Operations Manager",
+              absolute_url: "https://job-boards.greenhouse.io/acme/jobs/1",
+              location: { name: "San Francisco, CA" },
+            },
+            {
+              title: "Strategy & Operations Manager",
+              absolute_url: "https://job-boards.greenhouse.io/acme/jobs/2",
+              location: { name: "San Francisco, CA" },
+            },
+            {
+              title: "Corporate Strategy Manager",
+              absolute_url: "https://job-boards.greenhouse.io/acme/jobs/3",
+              location: { name: "San Francisco, CA" },
+            },
+          ],
+        }),
+      })
+    );
+
+    const uncapped = await discoverFromKnownCompanyBoards({
+      known: [{ company: "Acme", applyUrl: "https://job-boards.greenhouse.io/acme/jobs/999" }],
+      roleFamilies: ROLE_FAMILIES,
+    });
+    expect(uncapped.length).toBeGreaterThan(2);
+
+    const capped = await discoverFromKnownCompanyBoards({
+      known: [{ company: "Acme", applyUrl: "https://job-boards.greenhouse.io/acme/jobs/999" }],
+      roleFamilies: ROLE_FAMILIES,
+      maxCandidates: 2,
+    });
+
+    expect(capped).toHaveLength(2);
+    const best = Math.max(...uncapped.map((c) => c.matchScore ?? 0));
+    expect(capped[0].matchScore).toBe(best);
+    // Kept set must be the top slice by score, not an arbitrary truncation.
+    expect(capped[0].matchScore ?? 0).toBeGreaterThanOrEqual(capped[1].matchScore ?? 0);
+  });
+
   it("excludes over-senior titles (Director/Head of/VP/Principal) even if the title otherwise matches", async () => {
     vi.stubGlobal(
       "fetch",

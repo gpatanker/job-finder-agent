@@ -421,8 +421,24 @@ const TIER_RATIONALE: Record<Exclude<RoleFamilyTier, null>, string> = {
 export async function discoverFromKnownCompanyBoards(params: {
   known: { company: string; applyUrl: string | null }[];
   roleFamilies: string[];
+  /**
+   * Companies already at the overrepresentation threshold. Their boards are
+   * skipped entirely: this channel re-polls every known board on every run,
+   * so without this a company keeps contributing new postings indefinitely
+   * regardless of how many prior suggestions it already produced.
+   */
+  skipCompanies?: Set<string>;
+  /**
+   * Ceiling on candidates returned, keeping the highest-scoring. Board
+   * polling is free and exhaustive, so it can otherwise crowd out the paid
+   * search channel that supplies the actual variety.
+   */
+  maxCandidates?: number;
 }): Promise<JobCandidate[]> {
-  const boards = distinctKnownBoards(params.known);
+  const skip = params.skipCompanies;
+  const boards = distinctKnownBoards(params.known).filter(
+    ({ company }) => !skip?.has(company.trim())
+  );
   const results = await Promise.all(
     boards.map(async ({ company, board }) => {
       const jobs = await fetchLiveBoardJobs(board);
@@ -449,6 +465,11 @@ export async function discoverFromKnownCompanyBoards(params: {
         rationale: `Found via a direct poll of ${company}'s live job board (not a search result) — ${TIER_RATIONALE[tier]}.`,
       });
     }
+  }
+  if (params.maxCandidates !== undefined && candidates.length > params.maxCandidates) {
+    return [...candidates]
+      .sort((a, b) => (b.matchScore ?? 0) - (a.matchScore ?? 0))
+      .slice(0, params.maxCandidates);
   }
   return candidates;
 }
