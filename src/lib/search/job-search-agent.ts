@@ -94,6 +94,35 @@ export function isOverSeniorTitle(title: string): boolean {
   return OVER_SENIOR_TITLE_REGEX.test(title);
 }
 
+/**
+ * The floor that OVER_SENIOR_TITLE_REGEX never had a counterpart for. The
+ * candidate is a business/strategy operator, not a hands-on facilities,
+ * hardware, or field IC — but classifyRoleFamily only ever checked the
+ * ceiling, so an under-leveled title carrying a legitimate ops word sailed
+ * through on domain match alone.
+ *
+ * Confirmed 2026-08-26: "Associate Data Center Operations Technician"
+ * (xAI, Memphis TN) surfaced at score 54 because the title matched
+ * "operations" plus the "data center" ADJACENT_DOMAINS entry — an entry
+ * that has to stay, since "Infrastructure Operations" and "AI Infrastructure
+ * Operations" are the candidate's own stated role families. The domain is
+ * right; the level and the hands-on nature of the work are not. Gaurav's
+ * words: "data center Ops technician are not roles that align with what I
+ * do."
+ *
+ * Deliberately narrow. Only titles naming a manual/technical trade or an
+ * explicitly pre-professional level are listed, so a management title in the
+ * same domain ("Data Center Operations Lead", "Infrastructure Operations
+ * Manager") is untouched. \b prevents "intern" from firing inside
+ * "internal", which is a real word in ops titles.
+ */
+const UNDER_LEVELED_TITLE_REGEX =
+  /\b(technician|technologist|operator|apprentice|intern|installer|electrician|mechanic|custodian|janitor|warehouse associate)\b/i;
+
+export function isUnderLeveledTitle(title: string): boolean {
+  return UNDER_LEVELED_TITLE_REGEX.test(title);
+}
+
 export function computeOverrepresentedCompanies(knownJobs: { company: string; title: string }[]): string[] {
   const counts = new Map<string, number>();
   for (const j of knownJobs) {
@@ -183,7 +212,7 @@ SCORING RUBRIC for matchScore (0-100) — apply consistently, based only on role
 - FINANCE and MARKETING are hard exclusions — score below 40 — even when the title also names Business Operations, Strategy, or GTM in the same breath. Confirmed 2026-07-28: the candidate does not want any Finance-titled or Marketing-titled role, full stop, regardless of what else is in the title. This is a stronger rule than the general "adjacent domain only excluded on its own" pattern above — do not let "Business Operations" or "Strategy" in the same title override it. Real examples that must score below 40 under this rule: "Strategic Finance - Business Operations Lead", "Manager, Strategic Finance & Business Operations", "Sr. Manager, Growth Marketing Operations", "FP&A Manager, Business Operations".
 - CORPORATE DEVELOPMENT / M&A is a hard exclusion — score below 40 — even when the title also names Operations, Business, or Strategy. It is a distinct deal-sourcing and integration specialization the candidate has zero experience in, not a flavor of BizOps, and "Corporate" is not a qualifying domain word here. Confirmed 2026-07-28 real example: "Corporate Development Operation & M&A Integration Lead" (Snowflake). "Product Strategy and Corporate Development Lead" is excluded on the same basis.
 - QUOTA-CARRYING AND CUSTOMER-FACING SALES IC ROLES are a hard exclusion — score below 40 — even when paired with "Strategic", "Commercial", "Enterprise", or a named vertical. This covers Account Executive, Account Manager, Sales Manager / Manager of AEs, Sales Development Representative (SDR) and Business Development Representative (BDR), Strategic/Enterprise Customer Success Manager, and Strategic Partner/Partnerships Manager roles that are really relationship-ownership jobs. Note "Sales Operations" / "Revenue Operations" / "Partner Operations" remain fully in scope — the exclusion is the selling/account-owning role, not the ops function behind it. Confirmed 2026-07-28 real examples that must score below 40: "Strategic Account Executive, Retail & Commercial Banking - FSI" (Anthropic), "Manager, Account Executive - Strategic Sales" (Anthropic), "Strategic Account Executive, New Vertical Sales" (Flex), "Sales Manager, Strategic Accounts" (Ripple), "Strategic Sales Development Representative, Robotics & Automotive" (Scale AI).
-- HANDS-ON ENGINEERING AND TECHNICAL IC ROLES are a hard exclusion — score below 40 — for any title containing "Engineer" (as in "...Engineer" job titles — not the broader "Engineering" as a modifier, which can legitimately describe a BizOps-for-the-engineering-org role), even when it also names Operations, Infrastructure, Data Center, or Strategic Partnerships. The candidate is explicit that pure engineering does not align with his background. This is stronger than the general software-engineering line above, because these titles are not obviously software roles and kept scoring in the 60s-70s on the strength of their "Operations" qualifier. Confirmed 2026-07-28 real examples: "Sales Systems Engineer, Enterprise Operations" (Perplexity), "Global Operations Engineer (Product & Change Management)" (SpaceX), "Infrastructure Engineer (Data Center Operations)" (Cerebras), "Quality Engineer - Rack Infrastructure & Site Operations - Stargate" (OpenAI), "AI Field Engineer - Strategic Partnerships" (Fireworks AI), "Data Center Operations Systems Engineer" (Lambda). Also excluded on the same hands-on-technical-IC basis: "Network Operator, Data Center Operations" (Fluidstack). What stays IN scope: non-engineer-titled roles in the same domains — "Infrastructure Operations", "AI Infrastructure Operations", "Technical Program Manager", and a title like "Engineering Strategy & Operations Manager" are the candidate's own role families and target titles, not excluded by this rule.
+- HANDS-ON ENGINEERING AND TECHNICAL IC ROLES are a hard exclusion — score below 40 — for any title containing "Engineer" (as in "...Engineer" job titles — not the broader "Engineering" as a modifier, which can legitimately describe a BizOps-for-the-engineering-org role), even when it also names Operations, Infrastructure, Data Center, or Strategic Partnerships. The candidate is explicit that pure engineering does not align with his background. This is stronger than the general software-engineering line above, because these titles are not obviously software roles and kept scoring in the 60s-70s on the strength of their "Operations" qualifier. Confirmed 2026-07-28 real examples: "Sales Systems Engineer, Enterprise Operations" (Perplexity), "Global Operations Engineer (Product & Change Management)" (SpaceX), "Infrastructure Engineer (Data Center Operations)" (Cerebras), "Quality Engineer - Rack Infrastructure & Site Operations - Stargate" (OpenAI), "AI Field Engineer - Strategic Partnerships" (Fireworks AI), "Data Center Operations Systems Engineer" (Lambda). Also excluded on the same hands-on-technical-IC basis, and equally hard: any title naming a manual or technical TRADE or a pre-professional level — Technician, Technologist, Operator, Apprentice, Intern, Installer, Electrician, Mechanic. Confirmed 2026-08-26 real example: "Associate Data Center Operations Technician" (xAI, Memphis TN), which the candidate called out directly — "data center Ops technician are not roles that align with what I do". The domain word ("Data Center", "Operations") is not the problem; the trade-level nature of the work is. What stays IN scope: non-engineer-titled roles in the same domains — "Infrastructure Operations", "AI Infrastructure Operations", "Technical Program Manager", and a title like "Engineering Strategy & Operations Manager" are the candidate's own role families and target titles, not excluded by this rule.
 - Do NOT adjust the score based on the company's industry — a Business Operations Manager role scores the same whether the company is in AI infrastructure, insurance, gaming, fintech, or government, as long as the role/function itself fits. Industry is only used earlier to help find candidates, never to score them.
 - Reserve 85+ for postings where the title is a direct core-family match AND the material actually evidences the duties/level/location fit — not for a title that merely sounds senior. Spread the rest across the range rather than clustering; a score that doesn't distinguish a strong fit from a passable one is useless to the candidate.
 

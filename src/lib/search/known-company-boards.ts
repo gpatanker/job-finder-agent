@@ -1,6 +1,6 @@
 import { isComparableTitle } from "./freshness-check";
 import { detectAtsBoard, fetchLiveBoardJobs, type AtsBoard, type LiveBoardJob } from "./live-board";
-import { isOverSeniorTitle, type JobCandidate } from "./job-search-agent";
+import { isOverSeniorTitle, isUnderLeveledTitle, type JobCandidate } from "./job-search-agent";
 
 /**
  * Zero-Perplexity-cost discovery channel: for every company we already have
@@ -434,6 +434,8 @@ export async function discoverFromKnownCompanyBoards(params: {
   for (const { company, jobs } of results) {
     for (const job of jobs as LiveBoardJob[]) {
       if (isOverSeniorTitle(job.title)) continue;
+      // Same backstop at the other end of the range — see isUnderLeveledTitle.
+      if (isUnderLeveledTitle(job.title)) continue;
       const tier = classifyRoleFamily(job.title);
       if (!tier) continue;
       // The board's own location field, plus the title itself — non-US

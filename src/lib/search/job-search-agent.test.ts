@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeOverrepresentedCompanies, isOverSeniorTitle } from "./job-search-agent";
+import {
+  computeOverrepresentedCompanies,
+  isOverSeniorTitle,
+  isUnderLeveledTitle,
+} from "./job-search-agent";
 
 describe("computeOverrepresentedCompanies", () => {
   it(
@@ -79,5 +83,33 @@ describe("isOverSeniorTitle", () => {
     expect(isOverSeniorTitle("Business Operations Lead")).toBe(false);
     // Staff-level is still in reach; only Principal-and-above moved out.
     expect(isOverSeniorTitle("Staff Strategy & Operations Lead")).toBe(false);
+  });
+});
+
+describe("isUnderLeveledTitle", () => {
+  it(
+    "regression: excludes trade/pre-professional titles that carry a legitimate ops domain word — " +
+      'real case 2026-08-26, "Associate Data Center Operations Technician" (xAI) surfaced at 54 ' +
+      'because classifyRoleFamily had a seniority ceiling but no floor',
+    () => {
+      expect(isUnderLeveledTitle("Associate Data Center Operations Technician")).toBe(true);
+      expect(isUnderLeveledTitle("Network Operator, Data Center Operations")).toBe(true);
+      expect(isUnderLeveledTitle("Field Installer, Infrastructure Operations")).toBe(true);
+      expect(isUnderLeveledTitle("Business Operations Intern")).toBe(true);
+    }
+  );
+
+  it("leaves management-level titles in the same domain untouched", () => {
+    // The domain is the candidate's own — only the level disqualified above.
+    expect(isUnderLeveledTitle("Data Center Operations Lead - Partner Site Operations")).toBe(false);
+    expect(isUnderLeveledTitle("Infrastructure Operations Manager")).toBe(false);
+    expect(isUnderLeveledTitle("AI Infrastructure Operations, Demand Planning")).toBe(false);
+    expect(isUnderLeveledTitle("Business Operations Manager")).toBe(false);
+    expect(isUnderLeveledTitle("Strategy & Operations Manager")).toBe(false);
+  });
+
+  it("does not fire on 'intern' inside 'internal', a real word in ops titles", () => {
+    expect(isUnderLeveledTitle("Manager, Internal Business Operations")).toBe(false);
+    expect(isUnderLeveledTitle("Internal Operations Strategy Lead")).toBe(false);
   });
 });
