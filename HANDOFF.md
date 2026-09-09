@@ -2,7 +2,7 @@
 
 **Purpose:** If this conversation is lost and you're starting fresh, read this file top to bottom before doing anything else. It captures the state, decisions, and hard-won operational knowledge that aren't visible just from reading the code. Update it as things change — it's meant to stay current, not be a one-time snapshot.
 
-Last updated: 2026-08-03.
+Last updated: 2026-09-08.
 
 ---
 
@@ -150,13 +150,73 @@ A fresh 85-suggestion batch from the direct-board-poll channel (`known-company-b
 
 Fixed in both `known-company-boards.ts`'s `classifyRoleFamily()`/`DISQUALIFYING_DOMAINS` (the free heuristic channel) and `job-search-agent.ts`'s LLM system prompt (mirrored for consistency across both discovery channels) — see git log for the exact diff. Deliberately scoped narrow in two places after review: the engineering exclusion is "engineer(s)" only, not the broader "engineering" (so "Engineering Strategy & Operations Manager" — a legitimate BizOps-for-the-eng-org title — stays in scope, since only bare "...Engineer" IC titles were ever evidenced as unwanted); and the "Strategic Partnerships"/"Strategic Customer Success Manager" sub-pattern (Mercury, Flex, Ōura, Notion, Plaid, Snowflake Alliance, Ashby, SentiLink, Watershed, Retell AI — 12 titles) was caught by the same classifier fix but wasn't individually named by the candidate; asked directly, he said restore all 12 to the queue rather than treat that sweep as settled — they're back in `job_search_suggestions` as `status='new'`, the code still classifies future postings of this shape as non-qualifying (SpaceX's "International Infrastructure Operations Specialist (Starlink)" was separately dismissed, but only because of a concurrent SpaceX interview — see Claude Code memory — not because the role itself is out of scope).
 
-## Current pipeline state (as of 2026-07-28)
+## Deployment: the search route was dying on Vercel — fixed 2026-08-21 (PR #1, merged)
 
-**145 real jobs on file: 115 applied, 28 blocked, 1 archived, 1 discovered (Vanta, not yet triaged).** **40 untriaged suggestions** in `job_search_suggestions` (`status='new'`) as of the precision pass above — the original 65-suggestion batch from the rewritten search pipeline (see below) was fully triaged (applied to, or blocked, across Datadog, DoorDash, Figma, Flex, Harper, Harvey, Hinge Health, Mixpanel, Notion, OpenAI, OpenFX, Pendo, PermitFlow, Picogrid, Plaid, Rillet, Samsara, Scale AI, Sierra AI, Snowflake, SpaceX, Verkada, Watershed, Zip, among others), then a *second*, larger board-poll batch (85 suggestions) surfaced and got precision-cleaned down to 40 per the section above — those 40 are worth an actual triage pass next. See git log for the batch history from the 2026-07-20 snapshot (51 applied/15 blocked) onward.
+Every Search/Import run on the deployed app failed with `The string did not match the expected pattern.` That is **Safari's** `res.json()` parse error, not a validation failure: no route set `maxDuration` and there was no `vercel.json`, so the function ran at the platform's short default, got killed mid-run, and Vercel answered with an HTML 504 that the client then failed to parse as JSON.
 
-**New pattern from recent batches, worth keeping**: always freshness-check *and sanity-check the actual role* (location, comp, eligibility) before promoting a `jobSearchSuggestions` row — the search agent can return a title/company match that's real and live but still a bad fit (e.g. a "Business Operations Manager" suggestion that turned out to be Remote-UK-only for a US-based candidate). Match score alone doesn't catch this; read the live posting.
+A full run is Perplexity discovery → one ~98k-input-token Claude structuring call (~46s alone) → per-candidate live-board checks, optionally twice when the widen pass fires — measured end to end at **~2m23s**. `export const maxDuration = 300` is now set on the routes that make LLM calls plus network verification (`search/run`, `search/clean`, `search/score-url`, `jobs/[id]/generate-resume`, `analyst/run`). The client also got a `readJson()` helper that reads the body as text first and reports the real HTTP status, so a timeout now says it timed out instead of surfacing an opaque parser error that reads like a client bug.
 
-**New ATS encountered**: Rippling's own hosted ATS — see the `apply-run` skill for the details (Cloudflare challenge, autofilled Location field needing correction, how to confirm submission success).
+**Debugging note:** `vercel logs --status-code 500 --since 1h --environment production --json` is how the *second* failure got diagnosed after this fix landed — that one turned out to be an Anthropic 400 (`credit balance is too low`), not a code problem at all. `POST()` in these routes has no try/catch, so any thrown error becomes a bare 500 with a non-JSON body; wrapping them so the real message reaches the toast is still an open cleanup.
+
+## Auth session expiry and the script fallback (2026-09-03 → 2026-09-08)
+
+The app gates every route behind a single-account Supabase Auth check, and **the Playwright browser's session silently expired around 2026-09-03**. Symptoms: every app API call returns 401 and `/search` redirects to `/login`.
+
+Two things to know:
+
+- **`curl` cannot verify this.** It has its own empty cookie jar and will always return 401. Check through the automation browser's own cookies (`page.context().cookies()` → `page.request.get(...)`), which is what the skill's close-out snippet already does.
+- **Logging in must happen in the Playwright browser window**, not your everyday browser — separate profiles, separate cookie jars. Re-signing in there restored it on 2026-09-08 (cookie `sb-<project-ref>-auth-token`).
+
+While it was expired, ~14 applications were still submitted by calling the **same library functions the API routes wrap**, from a throwaway `.mts` run with `node --env-file=.env.local --import tsx`: `promote` logic → `generateTailoringPlan` → `applyTailoring` → `renderResumePdf` → `uploadResumePdf`, then close-out re-using the real `computeJobStatusSideEffects()` cascade so `appliedAt` and the KPI timestamps populate identically. Those records are indistinguishable from API-produced ones. Prefer the real API when the session is alive; this is the documented fallback when it is not.
+
+Two file-resolution gotchas for that fallback: the script must live **inside the project directory** (Node's ESM resolution needs `node_modules`), and it must be `.mts` — a plain `.ts` is treated as CJS by tsx and rejects top-level `await`.
+
+## Open PRs as of 2026-09-08 (merge in this order)
+
+Both are pushed and open; neither is on `main`, so production still has neither behavior.
+
+1. **#2 `fix/board-poll-company-concentration`** — the free board-polling channel re-walks the ATS board of **every** company already in the pipeline (161 of them) on every run. Measured 2026-08-11..20: it supplied **46 of 76** suggestions and produced **every** cross-day repeat company (Anthropic 7/7 from boards, Anduril 6/6, DoorDash 3/3). The existing `computeOverrepresentedCompanies()` guard only ever reached the Claude prompt, so it structurally could not touch this channel. Adds a pre-fetch skip plus a 25-candidate cap. Uses its own `BOARD_POLL_SKIP_THRESHOLD = 5` rather than the prompt's soft `3` — at 3 it would skip 56% of all boards, at 5 it skips 29% and still catches every repeat offender. Until this merges, expect floods: Anduril sent **4 postings in one batch** on 2026-09-08.
+2. **#3 `fix/under-leveled-title-floor`** — `classifyRoleFamily()` had a ceiling (`isOverSeniorTitle`) but no floor, so "Associate Data Center Operations Technician" (xAI) surfaced at 54 by matching `operations` + the `data center` entry in `ADJACENT_DOMAINS`. That entry has to stay — Infrastructure Operations is one of his own role families — so the fix is a level rule, not a domain one: new `isUnderLeveledTitle()` (Technician/Technologist/Operator/Apprentice/Intern/Installer/Electrician/Mechanic), applied in the board channel beside the ceiling check and mirrored in the Claude prompt. Management titles in the same domain stay in scope.
+
+Both touch `job-search-agent.ts` and `known-company-boards.ts`; #3 branches from `main`, so rebase it after #2 lands.
+
+## Known bug, not yet filed: the daily-sweep check misfires every evening Pacific
+
+The apply-run skill's "has a run already started today?" gate queries `agent_run_queue WHERE started_at::date = CURRENT_DATE`. The database runs in **UTC**. Any run after ~17:00 Pacific lands on the next UTC day, so the check reports zero runs and would trigger a redundant Gmail sweep. Confirmed 2026-09-08: five closeouts at 18:07–18:13 UTC, and the gate still returned 0. Compare in a fixed local timezone (`(started_at AT TIME ZONE 'America/Los_Angeles')::date`) rather than the session default, or sanity-check the raw timestamps before sweeping twice in one day.
+
+## Scope decisions since 2026-08 (all also in Claude Code memory)
+
+- **Procurement / Strategic Sourcing is now IN scope** (confirmed 2026-08-19). The prompt rubric in `job-search-agent.ts` still lists "Procurement/Strategic Sourcing/Commodity Management" among the adjacent specializations to score below 40 — **that line now contradicts the decision** and is worth removing next time the rubric is touched.
+- **Trade/technician-level titles are OUT**, even in a legitimate ops domain — see PR #3 above.
+- **Sales-embedded roles are out regardless of title.** The recurring tell is the JD's reporting line and duties, not the title: field enablement for AEs/CSMs, quota or commission planning, channel/partner operations, pipeline coverage, "sell directly to" language. Real 2026-08/09 blocks on this basis include Affirm GTM S&O, Arkose Labs GTM Ops (commission runs, Gong admin), Vanta Partner GTM S&O, Datadog GTM S&O (quota planning), and Grow Therapy Commercial Strategy.
+- **Watch for posting drift.** Suggestion titles go stale between discovery and apply: Ōura "Senior Manager, S&O" became an Accounting Operations role, Hinge Health became Marketing QA, and a DoorDash S&O req became a different team's role twice. Always read the live posting before submitting, and re-tailor if the role changed materially.
+
+## Platform application caps encountered
+
+- **OpenAI** — 5 applications per 180 days; hit 5/5 as of 2026-08-05, so new OpenAI suggestions are blocked until that window rolls off.
+- **Ramp** — 100-day repeat cap; hit and rejected outright on 2026-08-06.
+- **Fluidstack** — no more than 2 per 100 days, and no reapply within 365 days if not offered.
+
+## Current pipeline state (as of 2026-09-08)
+
+**231 applied, 138 blocked. Search queue is empty** (`job_search_suggestions` `status='new'` = 0).
+
+**8 first-round interviews**, all recorded in `jobs.firstRoundInterviewAt`:
+
+| Date | Company — role |
+|---|---|
+| 2026-09-02 | Base Power — Project Operations Specialist *(furthest along; hiring-manager round 2026-09-08)* |
+| 2026-08-28 | Anduril — Associate, Business & Revenue Operations, Air Defense *(rejected 2026-09-04)* |
+| 2026-08-25 | WindBorne Systems — Mission Operations Specialist |
+| 2026-08-10 | PermitFlow — Product Operations Manager |
+| 2026-08-04 | SpaceX — Business Operations Analyst (Starlink) |
+| 2026-08-03 | Railway — Operations Manager |
+| 2026-07-23 | Redwood Materials — Commercial Operations Manager |
+| 2026-07-21 | Fluidstack — Site Operations Capacity Analyst |
+
+**The single most actionable finding, from the Pipeline Analyst and now holding across 8 interviews rather than 2:** every interview has come from **infrastructure / hardware / energy operations** roles at *mid* coverage scores (roughly 25–50), while high-match GTM-titled roles have converted **zero** across 200+ applications. Coverage and match scores are not predicting outcomes. Weight discovery and triage toward the converting cluster.
+
+Still untracked on purpose: interviews from applications made *outside* this app (VESSL AI, Supermicro) — real activity, but they stay out of the interview count unless deliberately added.
 
 ## Where to look for more
 
