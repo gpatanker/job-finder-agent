@@ -59,17 +59,17 @@ describe("classifyRoleFamily", () => {
   it("still matches genuinely on-target titles", () => {
     const shouldMatch: [string, ReturnType<typeof classifyRoleFamily>][] = [
       ["Strategy & Operations Manager", "strategy-ops"],
-      ["Senior GTM Strategy & Operations Manager", "core"],
+      ["Senior Business Strategy & Operations Manager", "core"],
       ["Business Operations Manager AI infrastructure", "core"],
       ["Manager, Business Operations", "core"],
-      ["Revenue Operations Manager", "core"],
-      ["Founding RevOps", "core"],
+      ["Business Operations Manager", "core"],
+      ["Founding BizOps", "core"],
       ["Founding Biz Ops Lead", "core"],
-      ["GTM Strategy & Operations", "core"],
+      ["Commercial Strategy & Operations", "core"],
       ["Business Operations Analyst (Starlink)", "core"],
       ["Compute Strategy & Operations Lead", "strategy-ops"],
       ["Pricing Strategy & Operations", "strategy-ops"],
-      ["Sales Operations Manager, New Business", "core"],
+      ["Business Operations Manager, New Business", "core"],
       ["Product Operations Manager", "adjacent"],
       ["Technical Operations Manager", "adjacent"],
     ];
@@ -132,8 +132,8 @@ describe("classifyRoleFamily", () => {
         expect(classifyRoleFamily(title), title).toBeNull();
       }
       // The ops function behind the sales org is still the candidate's job.
-      expect(classifyRoleFamily("Sales Operations Manager - Enterprise")).toBe("adjacent");
-      expect(classifyRoleFamily("Revenue Operations Manager")).toBe("core");
+      expect(classifyRoleFamily("Partner Operations Manager - Enterprise")).toBe("adjacent");
+      expect(classifyRoleFamily("Commercial Operations Manager")).toBe("core");
       expect(classifyRoleFamily("Partner Operations Lead")).toBe("adjacent");
     }
   );
@@ -182,7 +182,7 @@ describe("classifyRoleFamily", () => {
       expect(titleMatchesTargetRoleFamily("Senior Operations Manager")).toBe(false);
       // The blank has to be filled with one of the candidate's actual domains.
       expect(titleMatchesTargetRoleFamily("Business Operations Manager")).toBe(true);
-      expect(titleMatchesTargetRoleFamily("Revenue Operations Manager")).toBe(true);
+      expect(titleMatchesTargetRoleFamily("Business Operations Manager")).toBe(true);
     }
   );
 
@@ -260,9 +260,9 @@ describe("scoreLiveBoardMatch", () => {
       "exactly string-equal to a role family, so 58 real suggestions all scored 55)",
     () => {
       const scores = [
-        "Senior GTM Strategy & Operations Manager",
+        "Senior Business Strategy & Operations Manager",
         "Business Operations Manager",
-        "Revenue Operations Manager",
+        "Strategy & Operations Manager",
         "Product Operations Manager",
         "Business Operations Associate",
       ].map((t) => scoreLiveBoardMatch(t, ROLE_FAMILIES));
@@ -270,8 +270,8 @@ describe("scoreLiveBoardMatch", () => {
     }
   );
 
-  it("ranks a core BizOps/GTM-Ops manager title above an adjacent specialization above a junior one", () => {
-    const seniorCore = scoreLiveBoardMatch("Senior GTM Strategy & Operations Manager", ROLE_FAMILIES);
+  it("ranks a core BizOps manager title above an adjacent specialization above a junior one", () => {
+    const seniorCore = scoreLiveBoardMatch("Senior Business Strategy & Operations Manager", ROLE_FAMILIES);
     const core = scoreLiveBoardMatch("Business Operations Manager", ROLE_FAMILIES);
     const adjacent = scoreLiveBoardMatch("Product Operations Manager", ROLE_FAMILIES);
     const junior = scoreLiveBoardMatch("Business Operations Associate", ROLE_FAMILIES);
@@ -281,7 +281,7 @@ describe("scoreLiveBoardMatch", () => {
   });
 
   it("stays within a defensible band for a title-only signal, and returns 0 for a non-match", () => {
-    for (const title of ["Senior GTM Strategy & Operations Manager", "Product Operations Coordinator"]) {
+    for (const title of ["Senior Business Strategy & Operations Manager", "Product Operations Coordinator"]) {
       const score = scoreLiveBoardMatch(title, ROLE_FAMILIES);
       expect(score).toBeGreaterThanOrEqual(40);
       expect(score).toBeLessThanOrEqual(88);
@@ -403,7 +403,7 @@ describe("discoverFromKnownCompanyBoards", () => {
                 location: { name: "Guadalajara, Mexico" },
               },
               {
-                title: "Senior GTM Strategy & Operations Manager",
+                title: "Senior Business Strategy & Operations Manager",
                 absolute_url: "https://job-boards.greenhouse.io/acme/jobs/6",
                 location: { name: "Remote - US" },
               },
@@ -417,7 +417,7 @@ describe("discoverFromKnownCompanyBoards", () => {
         roleFamilies: ["Business Operations", "GTM Operations", "RevOps"],
       });
 
-      expect(candidates.map((c) => c.title)).toEqual(["Senior GTM Strategy & Operations Manager"]);
+      expect(candidates.map((c) => c.title)).toEqual(["Senior Business Strategy & Operations Manager"]);
     }
   );
 
@@ -471,5 +471,45 @@ describe("discoverFromKnownCompanyBoards", () => {
     });
 
     expect(candidates).toEqual([]);
+  });
+});
+
+describe("classifyRoleFamily — GTM/revenue-motion exclusion (candidate decision 2026-09-13)", () => {
+  it.each([
+    "Senior GTM Strategy & Operations Manager, Top of Funnel",
+    "GTM Strategy & Operations Manager, Post-Sales",
+    "GTM Strategy and Operations, Industry Lead",
+    "Senior Revenue Operations Manager",
+    "Revenue Strategy & Operations, Sr. Analyst",
+    "Manager, Growth Strategy & Operations (Experiments/Campaigns)",
+    "Customer Experience Strategy & Operations Lead",
+  ])("rejects %s", (title) => {
+    expect(classifyRoleFamily(title)).toBeNull();
+  });
+
+  // The rescue clause. These are the shapes that actually produced interviews —
+  // excluding them would be a regression, not a tightening.
+  it.each([
+    "Associate, Business & Revenue Operations, Air Defense", // Anduril — interviewed
+    "Commercial Operations Manager",                         // Redwood Materials — interviewed
+    "Business Operations Analyst (Starlink)",                // SpaceX — interviewed
+    "Product Operations Manager",                            // PermitFlow — interviewed
+    "Business Strategy & Operations Manager",
+    "Manager, Business Operations & Strategy",
+    "Senior Associate, Pricing & Commercial Operations",
+    "Manager - AI Infrastructure Operations",
+    // Sales Ops is in scope (candidate correction 2026-09-13) — his AWS role was
+    // BizOps on the Public Sector Partners team, so sales-adjacent ops is his background.
+    "Sales Operations Manager",
+    "Sales Strategy and Operations Division Lead",
+    "Strategy & Operations Manager",
+  ])("keeps %s", (title) => {
+    expect(classifyRoleFamily(title)).not.toBeNull();
+  });
+
+  it("does not let a bare 'Strategy & Operations' title rescue a GTM one", () => {
+    // BIZOPS_RESCUE is intentionally narrow — widening it to "strategy" would
+    // readmit the entire excluded family.
+    expect(classifyRoleFamily("GTM Strategy & Operations Manager")).toBeNull();
   });
 });
