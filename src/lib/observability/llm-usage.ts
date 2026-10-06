@@ -6,6 +6,8 @@ export type LlmCallSite =
   | "job_search"
   | "score_job_url"
   | "perplexity_discovery"
+  | "exa_discovery"
+  | "company_research"
   | "pipeline_analyst";
 
 // Approximate published per-million-token rates. These drive an *estimated*
@@ -47,7 +49,7 @@ export function estimatePerplexityCostUsd(requestCount: number): number {
  */
 export async function logLlmUsage(params: {
   callSite: LlmCallSite;
-  provider: "anthropic" | "perplexity";
+  provider: "anthropic" | "perplexity" | "exa";
   model: string;
   inputTokens?: number;
   outputTokens?: number;
