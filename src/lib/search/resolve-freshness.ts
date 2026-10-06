@@ -6,6 +6,7 @@ import {
   fetchGreenhouseJobById,
   fetchLiveBoardJobs,
   matchLiveJob,
+  sameBoardUrl,
   type LiveBoardJob,
 } from "./live-board";
 
@@ -73,6 +74,28 @@ export async function resolveCandidateFreshness(params: {
   if (board) {
     const jobs = await getLiveBoardJobs(board, liveBoardCache);
     if (jobs) {
+      // If the candidate's own URL is itself a currently-open posting on this
+      // board, it is already canonical and already verified live — return it
+      // untouched. Falling through to matchLiveJob here was an active bug: a
+      // title-similarity match would rewrite the URL to a DIFFERENT posting at
+      // the same company (real cases: Notion's "Customer Experience Strategy &
+      // Operations Lead" rewritten to "Partner Strategy & Operations Lead";
+      // most of DoorDash's ~26 distinct Strategy & Ops roles collapsing onto
+      // one URL). That corrupted the title↔URL pairing on anything that got
+      // through, and made genuinely new postings collide with an
+      // already-known URL and get silently skipped as duplicates. This matters
+      // most for the known-company-board channel, where the URL came straight
+      // off the board and never needed recovering in the first place.
+      const self = jobs.find((j) => sameBoardUrl(j.url, applyUrl));
+      if (self) {
+        return {
+          ok: true,
+          applyUrl: self.url,
+          sourceUrl: self.url,
+          recovered: false,
+          verifiedLive: true,
+        };
+      }
       const match = matchLiveJob(jobs, title);
       if (match) {
         return {
