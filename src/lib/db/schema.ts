@@ -356,6 +356,41 @@ export type AnalystRecommendation = {
  * see checkAnalystEligibility() in src/lib/analyst/eligibility.ts. Never
  * auto-applies its own recommendations; a human decides what to act on.
  */
+/**
+ * Cached research about an employer, shared across every job at that company.
+ *
+ * The Resume Tailoring Agent otherwise sees only the job description and a
+ * company name, which says nothing about what the company actually does or
+ * values — and that context is often the most relevant thing about a candidate's
+ * fit (Google Cloud's AI2 team being infrastructure-adjacent decides whether to
+ * lead with GPU-capacity work or with generic BizOps process work).
+ *
+ * Keyed by normalized company name and reused across jobs, because this pipeline
+ * repeatedly sees the same ~200 employers — researching per job would pay for the
+ * same answer dozens of times.
+ */
+export const companyProfiles = pgTable("company_profiles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  /** Lowercased, punctuation-stripped company name — the cache key. */
+  companyKey: text("company_key").notNull().unique(),
+  /** Company name as first seen, for display. */
+  companyName: text("company_name").notNull(),
+  /** 2-4 sentences: what they build, who for, how they make money. */
+  summary: text("summary").notNull(),
+  /** Short domain tags: "AI infrastructure", "cloud", "fintech". */
+  domains: jsonb("domains").$type<string[]>().notNull().default([]),
+  /** What this employer appears to value in an operations hire. */
+  valuedSignals: jsonb("valued_signals").$type<string[]>().notNull().default([]),
+  /** URLs the research drew on, so a stale/wrong profile can be traced. */
+  sourceUrls: jsonb("source_urls").$type<string[]>().notNull().default([]),
+  estimatedCostUsd: doublePrecision("estimated_cost_usd"),
+  researchedAt: timestamp("researched_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}).enableRLS();
+
+export type CompanyProfile = typeof companyProfiles.$inferSelect;
+
 export const analystReports = pgTable("analyst_reports", {
   id: uuid("id").defaultRandom().primaryKey(),
   triggerReason: text("trigger_reason").notNull(),
