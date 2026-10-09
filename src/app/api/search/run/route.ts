@@ -9,6 +9,7 @@ import {
 } from "@/lib/search/job-search-agent";
 import { resolveCandidateFreshness, type LiveBoardCache } from "@/lib/search/resolve-freshness";
 import { discoverFromKnownCompanyBoards } from "@/lib/search/known-company-boards";
+import { resolveRoleScope } from "@/lib/search/role-scope";
 
 // A full run is Perplexity discovery -> one ~98k-input-token Claude
 // structuring call (~46s on its own) -> per-candidate live-board freshness
@@ -177,6 +178,20 @@ export async function POST() {
     );
   }
 
+  // What counts as this candidate's function, read from the profile. Absent, it
+  // falls back to the original operations scope — so an existing instance is
+  // unaffected, while a fork in another role family retargets the title gate
+  // from its seed data instead of editing the classifier. See role-scope.ts.
+  const roleScope = resolveRoleScope(profile.searchCriteria?.roleScope);
+  if (!profile.searchCriteria?.roleScope) {
+    console.warn(
+      "[search/run] No searchCriteria.roleScope set — defaulting to the " +
+        `"${roleScope.label}" scope. If this instance targets a different role ` +
+        "family, set roleScope in local/profile.seed.json; the title classifier " +
+        "will otherwise reject your own target roles."
+    );
+  }
+
   // Deliberately NOT filtered by status: a suggestion the user already
   // dismissed (or promoted, or that went stale) must stay excluded from
   // future runs forever, not just while it's still sitting as "new" —
@@ -230,7 +245,7 @@ export async function POST() {
   let knownJobs = allKnown.map((j) => ({ company: j.company, title: j.title }));
   const [{ candidates: perplexityCandidates, warning: firstWarning }, boardPollCandidates] =
     await Promise.all([
-      findJobCandidates({ profile, knownJobs, lastRunDate }),
+      findJobCandidates({ profile, knownJobs, lastRunDate, roleScope }),
       // Free channel: directly poll every company we already have a
       // Greenhouse/Ashby link for, rather than paying for a search request
       // to ask "did this company post anything new" — see
@@ -240,6 +255,7 @@ export async function POST() {
         roleFamilies: profile.searchCriteria?.roleFamilies?.length
           ? profile.searchCriteria.roleFamilies
           : ["Business Operations Manager"],
+        roleScope,
         skipCompanies: computeOverrepresentedCompanyNames(knownJobs, BOARD_POLL_SKIP_THRESHOLD),
         maxCandidates: MAX_BOARD_POLL_CANDIDATES,
       }),
@@ -267,7 +283,7 @@ export async function POST() {
       ...existingJobs.map((j) => ({ company: j.company, title: j.title })),
       ...newlyKnown,
     ];
-    const widenResult = await findJobCandidates({ profile, knownJobs, lastRunDate, broaden: true });
+    const widenResult = await findJobCandidates({ profile, knownJobs, lastRunDate, broaden: true, roleScope });
     found += widenResult.candidates.length;
     lastWarning = widenResult.warning ?? lastWarning;
     const addedBefore = state.added;

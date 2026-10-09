@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { CandidateProfile } from "@/lib/db/schema";
+import { OPS_ROLE_SCOPE, type RoleScope } from "./role-scope";
 import { discoverCandidatePostings } from "./perplexity-discover";
 import { logAnthropicUsage } from "@/lib/observability/llm-usage";
 
@@ -33,8 +34,6 @@ const OVERREPRESENTED_THRESHOLD = 3;
  * known-company-boards.ts imports isOverSeniorTitle and applies it as a hard
  * reject before scoring, so a change here fixes both discovery channels.
  */
-const OVER_SENIOR_TITLE_REGEX =
-  /\b(director|head of|vice president|\bvp\b|\bsvp\b|\bevp\b|principal)\b/i;
 
 export type JobCandidate = {
   company: string;
@@ -90,8 +89,11 @@ const submitTool = {
   },
 };
 
-export function isOverSeniorTitle(title: string): boolean {
-  return OVER_SENIOR_TITLE_REGEX.test(title);
+export function isOverSeniorTitle(
+  title: string,
+  scope: RoleScope = OPS_ROLE_SCOPE
+): boolean {
+  return wholeWordRegex(scope.overSeniorTerms).test(title);
 }
 
 /**
@@ -116,11 +118,22 @@ export function isOverSeniorTitle(title: string): boolean {
  * Manager") is untouched. \b prevents "intern" from firing inside
  * "internal", which is a real word in ops titles.
  */
-const UNDER_LEVELED_TITLE_REGEX =
-  /\b(technician|technologist|operator|apprentice|intern|installer|electrician|mechanic|custodian|janitor|warehouse associate)\b/i;
 
-export function isUnderLeveledTitle(title: string): boolean {
-  return UNDER_LEVELED_TITLE_REGEX.test(title);
+export function isUnderLeveledTitle(
+  title: string,
+  scope: RoleScope = OPS_ROLE_SCOPE
+): boolean {
+  return wholeWordRegex(scope.underLeveledTerms).test(title);
+}
+
+/**
+ * Builds a whole-word, case-insensitive alternation from a scope's word list.
+ * \b matters: it keeps "intern" from firing inside "internal", which is a real
+ * word in ops titles, and keeps "vp" from firing inside "vped".
+ */
+function wholeWordRegex(terms: readonly string[]): RegExp {
+  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`\\b(${escaped.join("|")})\\b`, "i");
 }
 
 function countByCompany(knownJobs: { company: string }[]): Map<string, number> {
@@ -200,7 +213,14 @@ export async function findJobCandidates(params: {
   knownJobs: { company: string; title: string }[];
   lastRunDate?: Date | null;
   broaden?: boolean;
+  /**
+   * Supplies the candidate-specific half of the scoring rubric and the
+   * seniority band. Defaults to the original operations scope, so an instance
+   * that sets none gets a byte-identical prompt to before this was factored out.
+   */
+  roleScope?: RoleScope;
 }): Promise<{ candidates: JobCandidate[]; warning?: string }> {
+  const scope = params.roleScope ?? OPS_ROLE_SCOPE;
   if (!process.env.ANTHROPIC_API_KEY) {
     return {
       candidates: [],
@@ -234,21 +254,9 @@ export async function findJobCandidates(params: {
   const systemPrompt = `You are a job-search assistant helping a real candidate find currently-open roles. Web discovery has already been done for you (see DISCOVERY MATERIAL below) — your job is to extract, structure, dedupe, and score the postings actually present in it. Do not use anything you recall from training data instead of the material given.
 
 SCORING RUBRIC for matchScore (0-100) — apply consistently, based only on role/function fit, not industry:
-- Higher for: title closely matching the BizOps/Strategy & Ops/GTM Ops/RevOps/Technical Ops family; the role's actual duties involving operations/process ownership, cross-functional coordination, data-driven reporting, or GTM/revenue ops work; location in the candidate's stated metros or explicitly remote-US; salary (if listed) at or above the candidate's stated floor.
-- Lower for: pure customer-support IC roles, pure quota-carrying sales roles, or roles requiring deep hands-on software engineering the candidate's background doesn't support.
-- ADJACENT-BUT-DIFFERENT OPERATIONS SPECIALIZATIONS are NOT this candidate's function and must score low (below 40) no matter how senior or well-matched the rest of the posting looks. The word "Operations" in a title is not evidence of fit on its own — the qualifier in front of it is what matters. Specifically excluded: Recruiting/Talent Ops, HR/People Ops, Payroll/Benefits/Compensation Ops, Warehouse/Logistics/Supply Chain/Fulfillment/Inventory Ops, Procurement/Strategic Sourcing/Commodity Management, IT Ops/Helpdesk/NOC/Security Ops, Customer Support/Contact Center Ops, Clinical/Healthcare Ops, Billing/Treasury/Collections/Claims Ops, Content/Community/Trust & Safety Ops, Facilities/Workplace Ops, and Manufacturing/Field/Fleet Ops. Real cases the candidate dismissed after this rubric scored them 74-82: "OpenAI — Strategic Sourcing Manager, Compute", "Google — GPU Commodity Manager, Global Strategic Sourcing and Silicon Operations", "Lambda — Procurement & Operations Lead". A supply-chain or support-flavored title is only in scope when it is explicitly framed as a business/strategy role (e.g. "Strategy & Operations Manager, Supply").
-- FINANCE and MARKETING are hard exclusions — score below 40 — even when the title also names Business Operations, Strategy, or GTM in the same breath. Confirmed 2026-07-28: the candidate does not want any Finance-titled or Marketing-titled role, full stop, regardless of what else is in the title. This is a stronger rule than the general "adjacent domain only excluded on its own" pattern above — do not let "Business Operations" or "Strategy" in the same title override it. Real examples that must score below 40 under this rule: "Strategic Finance - Business Operations Lead", "Manager, Strategic Finance & Business Operations", "Sr. Manager, Growth Marketing Operations", "FP&A Manager, Business Operations".
-- CORPORATE DEVELOPMENT / M&A is a hard exclusion — score below 40 — even when the title also names Operations, Business, or Strategy. It is a distinct deal-sourcing and integration specialization the candidate has zero experience in, not a flavor of BizOps, and "Corporate" is not a qualifying domain word here. Confirmed 2026-07-28 real example: "Corporate Development Operation & M&A Integration Lead" (Snowflake). "Product Strategy and Corporate Development Lead" is excluded on the same basis.
-- QUOTA-CARRYING AND CUSTOMER-FACING SALES IC ROLES are a hard exclusion — score below 40 — even when paired with "Strategic", "Commercial", "Enterprise", or a named vertical. This covers Account Executive, Account Manager, Sales Manager / Manager of AEs, Sales Development Representative (SDR) and Business Development Representative (BDR), Strategic/Enterprise Customer Success Manager, and Strategic Partner/Partnerships Manager roles that are really relationship-ownership jobs. Note "Sales Operations", "Partner Operations" and "Sales Strategy & Operations" all remain fully in scope — the exclusion here is the selling/account-owning role, not the ops function behind it. ("Revenue Operations" is excluded, but separately — see the GTM/revenue-motion rule below.) Confirmed 2026-07-28 real examples that must score below 40: "Strategic Account Executive, Retail & Commercial Banking - FSI" (Anthropic), "Manager, Account Executive - Strategic Sales" (Anthropic), "Strategic Account Executive, New Vertical Sales" (Flex), "Sales Manager, Strategic Accounts" (Ripple), "Strategic Sales Development Representative, Robotics & Automotive" (Scale AI).
-- HANDS-ON ENGINEERING AND TECHNICAL IC ROLES are a hard exclusion — score below 40 — for any title containing "Engineer" (as in "...Engineer" job titles — not the broader "Engineering" as a modifier, which can legitimately describe a BizOps-for-the-engineering-org role), even when it also names Operations, Infrastructure, Data Center, or Strategic Partnerships. The candidate is explicit that pure engineering does not align with his background. This is stronger than the general software-engineering line above, because these titles are not obviously software roles and kept scoring in the 60s-70s on the strength of their "Operations" qualifier. Confirmed 2026-07-28 real examples: "Sales Systems Engineer, Enterprise Operations" (Perplexity), "Global Operations Engineer (Product & Change Management)" (SpaceX), "Infrastructure Engineer (Data Center Operations)" (Cerebras), "Quality Engineer - Rack Infrastructure & Site Operations - Stargate" (OpenAI), "AI Field Engineer - Strategic Partnerships" (Fireworks AI), "Data Center Operations Systems Engineer" (Lambda). Also excluded on the same hands-on-technical-IC basis, and equally hard: any title naming a manual or technical TRADE or a pre-professional level — Technician, Technologist, Operator, Apprentice, Intern, Installer, Electrician, Mechanic. Confirmed 2026-08-26 real example: "Associate Data Center Operations Technician" (xAI, Memphis TN), which the candidate called out directly — "data center Ops technician are not roles that align with what I do". The domain word ("Data Center", "Operations") is not the problem; the trade-level nature of the work is. What stays IN scope: non-engineer-titled roles in the same domains — "Infrastructure Operations", "AI Infrastructure Operations", "Technical Program Manager", and a title like "Engineering Strategy & Operations Manager" are the candidate's own role families and target titles, not excluded by this rule.
+${scope.rubricRules}
 - Do NOT adjust the score based on the company's industry — a Business Operations Manager role scores the same whether the company is in AI infrastructure, insurance, gaming, fintech, or government, as long as the role/function itself fits. Industry is only used earlier to help find candidates, never to score them.
 - Reserve 85+ for postings where the title is a direct core-family match AND the material actually evidences the duties/level/location fit — not for a title that merely sounds senior. Spread the rest across the range rather than clustering; a score that doesn't distinguish a strong fit from a passable one is useless to the candidate.
-
-- GO-TO-MARKET AND REVENUE-MOTION OPERATIONS is a hard exclusion — score below 40. This covers GTM Strategy & Operations, Revenue Operations / RevOps, Revenue Strategy & Operations, Growth Strategy & Operations, Customer Experience Strategy & Operations, and any ops role centred on quota, pipeline, top-of-funnel or demand generation. NOTE: "Sales Operations" and "Sales Strategy & Operations" are NOT excluded and remain in scope — the candidate confirmed this on 2026-09-13; his AWS role was Business Operations Analyst on the Public Sector Partners team, so sales-adjacent operations is his actual background. Plain "Strategy & Operations" is likewise in scope and is a core target. The candidate stated on 2026-09-13 that he does not have go-to-market experience and does not want these roles, and the record agrees: 42 of 240 applications were GTM-flavored and produced only 2 of 9 first-round interviews. Confirmed real examples that must now score below 40: "Senior GTM Strategy & Operations Manager, Top of Funnel" (Vanta), "GTM Strategy & Operations Manager, Post-Sales" (Zip), "GTM Strategy and Operations, Industry Lead" (Sierra AI), "Senior Revenue Operations Manager" (Skydio), "Revenue Strategy & Operations, Sr. Analyst" (Baseten), "Manager, Growth Strategy & Operations" (Airwallex), "Customer Experience Strategy & Operations Lead" (Notion).
-  IMPORTANT EXCEPTIONS, do not over-apply this rule: (a) a title that is explicitly BUSINESS Operations stays in scope even when it also names revenue or GTM — "Associate, Business & Revenue Operations, Air Defense" (Anduril) is in scope and produced an interview; (b) "Commercial Operations" stays in scope — "Commercial Operations Manager" (Redwood Materials) also produced an interview, and "commercial" is not a go-to-market word here; (c) PRODUCT Operations stays in scope ("Product Operations Manager", PermitFlow — produced an interview), while Customer Experience Operations does not; (d) Business Operations, Strategy & Operations, Infrastructure/Data-Center Operations and Capacity Operations are all unaffected and remain the core targets.
-
-SENIORITY CEILING — the candidate's reach tops out at Senior Manager. Do NOT include Director, Senior Director, Associate Director, Head of, VP/Vice President, SVP, EVP, Chief-of-staff-as-a-title, or any more senior title, even if everything else about the role is a strong match. PRINCIPAL-titled roles are also out of reach — confirmed 2026-07-28 after the candidate rejected "Principal, Strategic Partnerships (Health Systems)" (Assort Health) and "Principal Electrical Operations Lead — Data Center Operations" (Fluidstack) as too senior for him. Exclude "Principal" anywhere in the title, whether it's the whole level ("Principal, Business Operations") or a modifier on the function ("Principal Operations Lead"). Manager, Senior Manager, Lead, and Staff-level titles are still fair game — the line is now Principal-and-above, not Director-and-above.
-
 Rules:
 - Only include postings actually present in the discovery material below, with a real applyUrl/sourceUrl drawn from it. Never fabricate a posting or guess a URL — if the material doesn't include a specific posting's direct link, don't include that candidate.
 - applyUrl MUST be a deep link directly to that specific posting (a Greenhouse/Ashby/Lever URL with a job ID, or a company career-site URL with a role-specific slug) — NEVER a generic careers/jobs landing page (e.g. "company.com/careers" or "company.com/join-us" with nothing after it). If the material doesn't give a specific-enough link for a mentioned posting, don't include that candidate.
@@ -322,7 +330,7 @@ Extract, dedupe, and score the candidates present in the discovery material, the
         typeof (c as JobCandidate).applyUrl === "string" &&
         typeof (c as JobCandidate).sourceUrl === "string"
     )
-    .filter((c) => !isOverSeniorTitle(c.title))
+    .filter((c) => !isOverSeniorTitle(c.title, scope))
     .map((c) => ({
       ...c,
       matchScore: Math.max(0, Math.min(100, Math.round(Number(c.matchScore) || 0))),

@@ -5,8 +5,14 @@
   "linkedin": "https://www.linkedin.com/in/jordan-example/",
   "location": "Austin, Texas, United States",
   "currentCompany": "Example Corp",
-  "functionTags": ["Business Operations", "Strategy & Operations"],
-  "preferredIndustries": ["Enterprise software", "Fintech"],
+  "functionTags": [
+    "Business Operations",
+    "Strategy & Operations"
+  ],
+  "preferredIndustries": [
+    "Enterprise software",
+    "Fintech"
+  ],
   "workAuthorized": true,
   "requiresSponsorship": false,
   "genderIdentity": "",
@@ -21,12 +27,67 @@
   "howHeardDefault": "",
   "aiPolicyAgreement": "",
   "education": [
-    { "school": "State University", "degree": "B.S. in Business Administration" }
+    {
+      "school": "State University",
+      "degree": "B.S. in Business Administration"
+    }
   ],
   "searchCriteria": {
-    "roleFamilies": ["Business Operations Manager", "Strategy Associate"],
-    "locations": ["Austin", "Remote"],
+    "roleFamilies": [
+      "Business Operations Manager",
+      "Strategy Associate"
+    ],
+    "locations": [
+      "Austin",
+      "Remote"
+    ],
     "salaryFloor": 120000,
-    "industries": ["Enterprise software", "Fintech"]
+    "industries": [
+      "Enterprise software",
+      "Fintech"
+    ],
+    "roleScope": {
+      "extends": "ops",
+      "_comment": "REQUIRED IF YOU ARE NOT IN OPERATIONS. Picks what counts as your function for the title classifier. Built-ins: 'ops' (Business/Strategy Operations) and 'product' (Product Management). Set the string alone (\"roleScope\": \"product\") to take a preset as-is, or use this object form with 'extends' plus any lists you want to override. Omit roleScope entirely and you inherit the operations scope — which will reject your own target roles if you are not in ops. See src/lib/search/role-scope.ts for every field and why each exists.",
+      "headTerms": [
+        "operations",
+        "operation",
+        "ops"
+      ],
+      "bareHeadIsCore": false,
+      "coreDomains": [
+        "business",
+        "revenue",
+        "commercial"
+      ],
+      "adjacentDomains": [
+        "sales",
+        "partner",
+        "technical",
+        "product"
+      ],
+      "disqualifyingDomains": [
+        "recruiting",
+        "people",
+        "finance",
+        "marketing",
+        "clinical",
+        "engineer"
+      ],
+      "overSeniorTerms": [
+        "director",
+        "head of",
+        "vice president",
+        "vp",
+        "principal"
+      ],
+      "underLeveledTerms": [
+        "intern",
+        "apprentice",
+        "technician",
+        "operator"
+      ],
+      "rubricRules": "- Higher for: titles closely matching <your role family>. Lower for: <adjacent families you do not want>.\n- <FAMILY> is a hard exclusion — score below 40 — even when the title also names <a word you do want>. Give the real reason, and real example titles you rejected.\n\nSENIORITY CEILING — your reach tops out at <level>. Do NOT include <levels above it>, even if everything else matches. <Levels> are still fair game."
+    }
   }
 }

@@ -1,6 +1,7 @@
 import { isComparableTitle } from "./freshness-check";
 import { detectAtsBoard, fetchLiveBoardJobs, type AtsBoard, type LiveBoardJob } from "./live-board";
 import { isOverSeniorTitle, isUnderLeveledTitle, type JobCandidate } from "./job-search-agent";
+import { OPS_ROLE_SCOPE, type RoleFamilyTier, type RoleScope } from "./role-scope";
 
 /**
  * Zero-Perplexity-cost discovery channel: for every company we already have
@@ -63,194 +64,20 @@ function hasAny(normalized: string, phrases: readonly string[]): boolean {
   return phrases.some((p) => normalized.includes(` ${p} `));
 }
 
-/** The operations/strategy function itself — a title with none of these isn't an ops role at all (catches "Senior Business Systems Manager", "Business Development Senior Manager", "Business Process Controls"). */
-const OPS_HEAD = ["operations", "operation", "ops", "revops", "bizops", "biz ops", "rev ops"] as const;
-const STRATEGY_HEAD = ["strategy", "strategic"] as const;
-
-/** Domains that ARE this candidate's function (BizOps / Strategy & Ops / RevOps / GTM Ops). */
-const CORE_DOMAINS = [
-  "business",
-  "biz",
-  "bizops",
-  "revenue",
-  "revops",
-  "rev",
-  "gtm",
-  "go to market",
-  "commercial",
-  "corporate",
-] as const;
-
 /**
- * Go-to-market / revenue-motion domains. Present in a title, these disqualify it
- * unless BIZOPS_RESCUE also matches — see classifyRoleFamily for the rationale
- * and the evidence. "customer experience" sits here rather than in
- * DISQUALIFYING_DOMAINS because it's a scope decision, not a hard mismatch;
- * "customer success" is already handled as adjacent elsewhere.
+ * The vocabulary that used to live here as module-level constants now lives in
+ * role-scope.ts, so a fork can retarget the classifier from its own profile
+ * instead of editing this file. OPS_ROLE_SCOPE holds the original values
+ * verbatim and is the default, so behaviour is unchanged when no scope is set.
+ *
+ * What stayed here is the gate's STRUCTURE — the ordering of the checks, and
+ * the reasoning behind each one. That ordering is the part that took several
+ * real false-positive corpora to get right; only the word lists were ever
+ * candidate-specific.
  */
-const GTM_SALES_DOMAINS = [
-  "gtm",
-  "go to market",
-  // "sales" is deliberately NOT here (candidate correction, 2026-09-13):
-  // Sales Operations and Sales Strategy & Operations are in scope. His AWS role
-  // was Business Operations Analyst on the Public Sector *Partners* team, so
-  // sales-adjacent ops is his actual background. Only GTM-branded and
-  // revenue/growth-motion titles are excluded.
-  "revenue",
-  "revops",
-  "rev ops",
-  "growth",
-  "customer experience",
-  "quota",
-  "pipeline",
-  "top of funnel",
-  "demand generation",
-] as const;
 
-/**
- * Explicit Business-Operations markers that override a GTM word. Deliberately
- * narrow — "business"/"bizops" only. Widening this to "strategy" would let
- * every "GTM Strategy & Operations" title straight back in, which is exactly
- * the family being excluded. Note normalizeForMatch collapses all punctuation
- * to spaces, so "Business & Revenue Operations" arrives as
- * "business revenue operations" — the phrase is written in that collapsed form.
- */
-const BIZOPS_RESCUE = ["business operations", "business revenue", "bizops", "biz ops"] as const;
-
-/**
- * Domains adjacent enough to be worth surfacing but a weaker fit than the
- * core set — matched, then scored lower rather than silently dropped.
- * "compute"/"infrastructure" are in here specifically because
- * "Infrastructure Operations" and "AI Infrastructure Operations" are among
- * the candidate's own stated role families.
- */
-const ADJACENT_DOMAINS = [
-  "sales",
-  "growth",
-  "partner",
-  "partners",
-  "partnership",
-  "partnerships",
-  "channel",
-  "technical",
-  "product",
-  "pricing",
-  "customer success",
-  "deal desk",
-  "compute",
-  "infrastructure",
-  "infra",
-  "data center",
-  "datacenter",
-] as const;
-
-/**
- * Specializations that share the word "operations" but are a different
- * profession — disqualifying even when a core domain word is also present
- * ("People Strategy & Operations" and "Talent Business Partner" both name
- * one of the core domains and are both still the wrong function). Every
- * entry here was either surfaced as real garbage on 2026-07-27 or is the
- * obvious sibling of one that was.
- */
-const DISQUALIFYING_DOMAINS = [
-  // HR / recruiting
-  "recruiting", "recruitment", "recruiter", "talent", "hr", "human resources",
-  "people", "personnel", "payroll", "benefits", "compensation", "immigration",
-  "onboarding specialist",
-  // Facilities / workplace / admin
-  "workplace", "facilities", "facility", "real estate", "office manager", "executive assistant",
-  // Healthcare / clinical
-  "clinical", "patient", "medical", "nursing", "nurse", "pharmacy", "veterinary",
-  // Money-movement back office
-  "billing", "treasury", "collections", "accounts payable", "accounts receivable",
-  "payroll operations", "loan", "lending", "claims", "underwriting", "escrow",
-  // IT / infosec / network operations centers
-  "it operations", "it ops", "information technology", "helpdesk", "help desk",
-  "service desk", "desktop", "network operations", "security operations", "soc",
-  // Content / community / trust & safety
-  "content", "moderation", "trust and safety", "editorial", "social media",
-  "community", "creative", "studio", "brand",
-  // Physical/industrial and consumer-venue operations
-  "restaurant", "kitchen", "culinary", "hospitality", "hotel", "retail store",
-  "housekeeping", "janitorial", "farm", "agriculture", "mining", "construction",
-  // Other functions that borrow "operations"
-  "data operations", "labeling", "annotation", "lifecycle", "hardware",
-  "research operations", "legal operations", "flight", "aviation", "maritime",
-  // Finance and marketing — hard exclusions, not softer ADJACENT_DOMAINS
-  // qualifiers, even when paired with "business"/"operations"/"strategy"
-  // (confirmed 2026-07-28: "Strategic Finance - Business Operations Lead"
-  // and "Manager, Strategic Finance & Business Operations" are explicitly
-  // out of scope despite both naming a core domain).
-  "finance", "financial", "accounting", "fp a",
-  "marketing",
-  // Corporate Development / M&A — a distinct deal-sourcing/integration
-  // specialization the candidate has no experience in, not a synonym for
-  // BizOps despite sharing the word "corporate" (a CORE_DOMAINS word) and
-  // often pairing with "operation(s)". Confirmed 2026-07-28 real case:
-  // "Corporate Development Operation & M&A Integration Lead" (Snowflake)
-  // scored 82 and got surfaced for promotion — "corporate" + "operation"
-  // was enough to pass the structural test despite this being nothing like
-  // the candidate's actual function.
-  "corporate development", "m a", "mergers and acquisitions", "merger integration",
-  // Quota-carrying / customer-facing sales IC roles — a different profession
-  // from Sales *Operations*, which stays in scope via ADJACENT_DOMAINS.
-  // These kept slipping through because "Strategic Account Executive" pairs
-  // "strategic" with "commercial"/"sales", and because an AE title need not
-  // contain the word "finance" to be a finance-vertical sales role. Confirmed
-  // 2026-07-28 real cases: "Strategic Account Executive, Retail & Commercial
-  // Banking - FSI" (Anthropic), "Manager, Account Executive - Strategic
-  // Sales" (Anthropic), "Strategic Account Executive, New Vertical Sales"
-  // (Flex), "Sales Manager, Strategic Accounts" (Ripple).
-  "account executive", "account executives", "account manager", "account managers",
-  // Sales/business development rep pipeline-generation roles. Short forms are
-  // safe here because hasAny is space-bounded, so a bare "sdr"/"bdr" token
-  // can't match inside a longer word. Confirmed 2026-07-28: "Strategic Sales
-  // Development Representative, Robotics & Automotive" (Scale AI).
-  "sales development representative", "business development representative",
-  "sales development rep", "business development rep", "sdr", "bdr",
-  // Hands-on engineering / technical IC roles. The candidate is explicit that
-  // "pure engineering does not align with what I do" — and these are not
-  // caught by the structural test, because a data-center or systems
-  // engineering title routinely also names "Operations" plus an
-  // ADJACENT_DOMAINS word (infrastructure, data center, technical).
-  // Confirmed 2026-07-28: "Sales Systems Engineer, Enterprise Operations"
-  // (Perplexity), "Global Operations Engineer (Product & Change Management)"
-  // (SpaceX), "Infrastructure Engineer (Data Center Operations)" (Cerebras),
-  // "Quality Engineer - Rack Infrastructure & Site Operations" (OpenAI),
-  // "AI Field Engineer - Strategic Partnerships" (Fireworks AI), "Data Center
-  // Operations Systems Engineer" (Lambda). Deliberately just "engineer(s)",
-  // not the broader "engineering" — all confirmed real cases are "...
-  // Engineer" IC titles, and the broader form would also exclude a
-  // legitimate BizOps-for-the-engineering-org title like "Engineering
-  // Strategy & Operations Manager", which isn't evidenced as unwanted.
-  // "Infrastructure Operations" and "AI Infrastructure Operations" are the
-  // candidate's own role families and stay in scope, as does "Technical
-  // Program Manager", which contains neither word.
-  "engineer", "engineers",
-  // "Network Operations" is already excluded above under IT/NOC, but the
-  // singular operator form is a different string and slipped through:
-  // "Network Operator, Data Center Operations" (Fluidstack, 2026-07-28).
-  "network operator", "network operators",
-  // Level, not domain, but never worth surfacing
-  "intern", "internship", "apprentice",
-] as const;
-
-/**
- * Softer exclusions: a different specialization on its own, but the
- * candidate's brief explicitly allows them when the role is clearly framed
- * as a business/strategy role rather than a functional one — so these are
- * only disqualifying when neither "business" nor "strategy" appears
- * (rejects "Supply Chain Operations Program Manager", keeps "Strategy and
- * Operations Associate, Supply Quality").
- */
-const CONDITIONAL_DOMAINS = [
-  "warehouse", "logistics", "supply chain", "supply", "fulfillment", "fulfilment",
-  "inventory", "procurement", "distribution", "transportation", "fleet", "dispatch",
-  "courier", "driver", "trucking", "manufacturing", "plant", "maintenance",
-  "support", "service operations", "call center", "contact center", "field operations",
-] as const;
-
-export type RoleFamilyTier = "core" | "strategy-ops" | "strategy" | "adjacent" | null;
+// RoleFamilyTier now lives in role-scope.ts alongside the vocabulary it describes.
+export type { RoleFamilyTier } from "./role-scope";
 
 /**
  * The precision gate: which tier of this candidate's function a live-board
@@ -264,12 +91,16 @@ export type RoleFamilyTier = "core" | "strategy-ops" | "strategy" | "adjacent" |
  * sweep already-queued suggestions when the scope decision changed — instead of
  * re-implementing it and letting the two drift.
  */
-export function isSalesSideGtmTitle(jobTitle: string): boolean {
+export function isSalesSideGtmTitle(jobTitle: string, scope: RoleScope = OPS_ROLE_SCOPE): boolean {
+  if (scope.excludedDomains.length === 0) return false;
   const t = normalizeForMatch(jobTitle);
-  return hasAny(t, GTM_SALES_DOMAINS) && !hasAny(t, BIZOPS_RESCUE);
+  return hasAny(t, scope.excludedDomains) && !hasAny(t, scope.rescuePhrases);
 }
 
-export function classifyRoleFamily(jobTitle: string): RoleFamilyTier {
+export function classifyRoleFamily(
+  jobTitle: string,
+  scope: RoleScope = OPS_ROLE_SCOPE
+): RoleFamilyTier {
   // An uncomparable title (non-Latin script, punctuation only) can't be
   // judged — reject rather than guess. This is the case that used to
   // wildcard-match everything.
@@ -277,7 +108,7 @@ export function classifyRoleFamily(jobTitle: string): RoleFamilyTier {
 
   const t = normalizeForMatch(jobTitle);
 
-  if (hasAny(t, DISQUALIFYING_DOMAINS)) return null;
+  if (hasAny(t, scope.disqualifyingDomains)) return null;
 
   // Sales-side GTM is out of scope (candidate decision, 2026-09-13): he has
   // BizOps/Strategy/Infra-Ops experience, not go-to-market experience, and the
@@ -293,15 +124,15 @@ export function classifyRoleFamily(jobTitle: string): RoleFamilyTier {
   // "Senior Revenue Operations Manager", "Sales Strategy and Operations Lead").
   // "commercial" is deliberately NOT listed — Redwood Materials' "Commercial
   // Operations Manager" also produced an interview.
-  if (isSalesSideGtmTitle(jobTitle)) return null;
+  if (isSalesSideGtmTitle(jobTitle, scope)) return null;
 
-  const hasStrategy = hasAny(t, STRATEGY_HEAD);
+  const hasStrategy = hasAny(t, scope.secondaryHeadTerms);
   const hasBusinessOrStrategy = hasStrategy || t.includes(" business ");
-  if (hasAny(t, CONDITIONAL_DOMAINS) && !hasBusinessOrStrategy) return null;
+  if (hasAny(t, scope.conditionalDomains) && !hasBusinessOrStrategy) return null;
 
-  const hasOps = hasAny(t, OPS_HEAD);
-  const hasCore = hasAny(t, CORE_DOMAINS);
-  const hasAdjacent = hasAny(t, ADJACENT_DOMAINS);
+  const hasOps = hasAny(t, scope.headTerms);
+  const hasCore = hasAny(t, scope.coreDomains);
+  const hasAdjacent = hasAny(t, scope.adjacentDomains);
 
   if (hasOps) {
     if (hasCore) return "core";
@@ -311,9 +142,13 @@ export function classifyRoleFamily(jobTitle: string): RoleFamilyTier {
     // (real case: "Associate Manager, Consumer Promotions Strategy").
     if (hasStrategy) return "strategy-ops";
     if (hasAdjacent) return "adjacent";
-    // Bare "Operations Manager" with no qualifying domain at all — the
-    // single biggest source of 2026-07-27's garbage. Rejected on purpose.
-    return null;
+    // A head noun with no qualifying domain at all. For operations this is
+    // rejected on purpose: bare "Operations Manager" was the single biggest
+    // source of 2026-07-27's garbage, because every profession has one. For a
+    // role family where the head noun IS the job ("Product Manager"), the same
+    // title is the target rather than noise — hence the scope flag rather than
+    // a hardcoded rejection.
+    return scope.bareHeadIsCore ? "core" : null;
   }
 
   if (hasStrategy) {
@@ -335,8 +170,11 @@ export function classifyRoleFamily(jobTitle: string): RoleFamilyTier {
   return null;
 }
 
-export function titleMatchesTargetRoleFamily(jobTitle: string): boolean {
-  return classifyRoleFamily(jobTitle) !== null;
+export function titleMatchesTargetRoleFamily(
+  jobTitle: string,
+  scope: RoleScope = OPS_ROLE_SCOPE
+): boolean {
+  return classifyRoleFamily(jobTitle, scope) !== null;
 }
 
 /**
@@ -428,9 +266,10 @@ const JUNIOR_MARKERS = [
 export function scoreLiveBoardMatch(
   jobTitle: string,
   roleFamilies: string[],
-  location?: string
+  location?: string,
+  scope: RoleScope = OPS_ROLE_SCOPE
 ): number {
-  const tier = classifyRoleFamily(jobTitle);
+  const tier = classifyRoleFamily(jobTitle, scope);
   if (!tier) return 0;
 
   const t = normalizeForMatch(jobTitle);
@@ -485,6 +324,12 @@ export async function discoverFromKnownCompanyBoards(params: {
   known: { company: string; applyUrl: string | null }[];
   roleFamilies: string[];
   /**
+   * What counts as this candidate's function. Defaults to the original
+   * operations scope so an instance that sets none behaves exactly as before;
+   * a fork sets it from the profile and the gate retargets with no code change.
+   */
+  roleScope?: RoleScope;
+  /**
    * Companies already at the overrepresentation threshold. Their boards are
    * skipped entirely: this channel re-polls every known board on every run,
    * so without this a company keeps contributing new postings indefinitely
@@ -498,6 +343,7 @@ export async function discoverFromKnownCompanyBoards(params: {
    */
   maxCandidates?: number;
 }): Promise<JobCandidate[]> {
+  const scope = params.roleScope ?? OPS_ROLE_SCOPE;
   const skip = params.skipCompanies;
   const boards = distinctKnownBoards(params.known).filter(
     ({ company }) => !skip?.has(company.trim())
@@ -512,10 +358,10 @@ export async function discoverFromKnownCompanyBoards(params: {
   const candidates: JobCandidate[] = [];
   for (const { company, jobs } of results) {
     for (const job of jobs as LiveBoardJob[]) {
-      if (isOverSeniorTitle(job.title)) continue;
+      if (isOverSeniorTitle(job.title, scope)) continue;
       // Same backstop at the other end of the range — see isUnderLeveledTitle.
-      if (isUnderLeveledTitle(job.title)) continue;
-      const tier = classifyRoleFamily(job.title);
+      if (isUnderLeveledTitle(job.title, scope)) continue;
+      const tier = classifyRoleFamily(job.title, scope);
       if (!tier) continue;
       // The board's own location field, plus the title itself — non-US
       // postings routinely name the city only in the title.
@@ -526,7 +372,7 @@ export async function discoverFromKnownCompanyBoards(params: {
         location: job.location,
         applyUrl: job.url,
         sourceUrl: job.url,
-        matchScore: scoreLiveBoardMatch(job.title, params.roleFamilies, job.location),
+        matchScore: scoreLiveBoardMatch(job.title, params.roleFamilies, job.location, scope),
         rationale: `Found via a direct poll of ${company}'s live job board (not a search result) — ${TIER_RATIONALE[tier]}.`,
       });
     }

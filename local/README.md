@@ -31,6 +31,37 @@ what's there.
   `raceEthnicity`, `sexualOrientation`, `veteranStatus` — free text, leave
   any blank to have the Apply Run Brief tell the automation to select
   "decline to answer" for it instead).
+
+  **If you are not in operations, set `searchCriteria.roleScope`.** It is the
+  one field that decides what the title classifier counts as "your function",
+  and it is the difference between the free job-board channel finding your
+  roles and rejecting all of them. Omit it and you inherit the Business /
+  Strategy Operations scope this project was first built for — under which
+  `classifyRoleFamily("Product Manager")` returns null.
+
+  Three ways to set it, cheapest first:
+
+  ```jsonc
+  // 1. Take a built-in preset as-is. Built-ins: "ops", "product".
+  "roleScope": "product"
+
+  // 2. Start from a preset and override a few lists.
+  "roleScope": { "extends": "product", "disqualifyingDomains": ["marketing", "design"] }
+
+  // 3. Spell one out in full — see src/lib/search/role-scope.ts for every
+  //    field and the reasoning behind each.
+  ```
+
+  Keys beginning with `_` are ignored, so you can leave notes to yourself in
+  the JSON. The field that catches people out is **`bareHeadIsCore`**: it must
+  be `false` for operations, where a bare "Operations Manager" is noise because
+  every profession has one, and `true` for product, where "Product Manager" is
+  precisely the target rather than a title needing a qualifier.
+
+  `rubricRules` is the candidate-specific half of the LLM's scoring prompt —
+  your in-scope families, your hard exclusions each with a reason, and your
+  seniority ceiling. The presets ship it empty on purpose: inheriting someone
+  else's exclusions is worse than writing your own.
 - **resume.seed.json** — your base resume as structured data, not a static
   file. Each bullet has a stable `id`, `keywords`, and a `synonyms` map (a
   small set of pre-approved phrasing swaps for that bullet only). The Resume
