@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { candidateProfile, jobSearchSuggestions, jobs } from "@/lib/db/schema";
-import { findJobCandidates, type JobCandidate } from "@/lib/search/job-search-agent";
+import {
+  computeOverrepresentedCompanyNames,
+  findJobCandidates,
+  type JobCandidate,
+} from "@/lib/search/job-search-agent";
 import { resolveCandidateFreshness, type LiveBoardCache } from "@/lib/search/resolve-freshness";
 import { discoverFromKnownCompanyBoards } from "@/lib/search/known-company-boards";
 
@@ -25,6 +29,24 @@ const MAX_WIDEN_PASSES = 1;
 // constraint rather than a useful diversity guard. Raised to 4; revisit if
 // per-company crowding becomes a problem again at this new volume.
 const MAX_NEW_SUGGESTIONS_PER_COMPANY = 4;
+// Board polling is free and re-walks every known board every run, so left
+// uncapped it dominates the queue: over 2026-08-11..20 it supplied 46 of 76
+// suggestions while the paid Perplexity+Claude channel — the one that
+// actually finds companies not already in the pipeline — supplied 30. This
+// keeps the highest-scoring board finds without letting the free channel
+// crowd out discovery. Note the per-company overrepresentation skip does the
+// heavier lifting; this is the backstop for the long tail.
+const MAX_BOARD_POLL_CANDIDATES = 25;
+// Deliberately higher than the prompt-facing OVERREPRESENTED_THRESHOLD (3).
+// That one is a soft "deprioritize" hint to the model; this one hard-skips a
+// board entirely, so it should bite later. Measured against real data on
+// 2026-08-24 (161 pollable boards): a threshold of 3 would skip 56% of all
+// boards, while 5 skips 29% and still catches every company that actually
+// repeated across days — Anthropic (40 prior), Anduril (35), DoorDash (32),
+// AlphaSense (11), Motive (5). Skipping is not information loss: the
+// Perplexity+Claude channel can still surface these companies, it just
+// deprioritizes them rather than re-walking their board every single run.
+const BOARD_POLL_SKIP_THRESHOLD = 5;
 // Safety buffer subtracted from the last-known suggestion timestamp before
 // using it as Perplexity's search_after_date_filter cutoff — covers the gap
 // between "run finished" and "results actually landed" (documented timing
@@ -218,6 +240,8 @@ export async function POST() {
         roleFamilies: profile.searchCriteria?.roleFamilies?.length
           ? profile.searchCriteria.roleFamilies
           : ["Business Operations Manager"],
+        skipCompanies: computeOverrepresentedCompanyNames(knownJobs, BOARD_POLL_SKIP_THRESHOLD),
+        maxCandidates: MAX_BOARD_POLL_CANDIDATES,
       }),
     ]);
   const candidates = [...perplexityCandidates, ...boardPollCandidates];
