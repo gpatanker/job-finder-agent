@@ -234,6 +234,7 @@ export async function findJobCandidates(params: {
     profile: params.profile,
     lastRunDate: params.lastRunDate,
     broaden: params.broaden,
+    roleScope: scope,
   });
 
   if (!discovery.combinedText) {

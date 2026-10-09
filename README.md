@@ -149,7 +149,7 @@ Quick reference:
 ```bash
 npx tsc --noEmit       # typecheck
 npm run build          # production build
-npm run test           # Vitest unit tests (333 tests / 33 files, no live services needed)
+npm run test           # Vitest unit tests (336 tests / 33 files, no live services needed)
 npm run test:e2e       # Playwright E2E against a real running app (needs credentials)
 ```
 

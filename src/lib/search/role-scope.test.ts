@@ -159,7 +159,24 @@ describe("the ops scope still carries its own rubric prose", () => {
     expect(OPS_ROLE_SCOPE.rubricRules).toContain("GO-TO-MARKET AND REVENUE-MOTION OPERATIONS");
   });
 
-  it("leaves the preset product scope's rules empty, so a fork is forced to write its own rather than inheriting someone else's", () => {
-    expect(PRODUCT_ROLE_SCOPE.rubricRules).toBe("");
+  it(
+    "gives every built-in preset usable rubric rules. An earlier version shipped them empty to force " +
+      "a fork to write its own, which was wrong: the prose is interpolated straight into the scorer's " +
+      "prompt, so empty means NO candidate guidance at all — strictly worse than a sensible default. " +
+      "A derived scope still gets candidate-specific rules, and validateDerivedScope rejects an empty one",
+    () => {
+      expect(PRODUCT_ROLE_SCOPE.rubricRules).toContain("PRODUCT MARKETING is a hard exclusion");
+      expect(PRODUCT_ROLE_SCOPE.rubricRules).toContain("SENIORITY CEILING");
+      // The IC-track nuance a generic ops rubric gets wrong for product.
+      expect(PRODUCT_ROLE_SCOPE.rubricRules).toContain("Do NOT treat STAFF or PRINCIPAL as too senior");
+    }
+  );
+
+  it("gives every preset its own query-phrase pool, so a paid run searches for the right job", () => {
+    expect(OPS_ROLE_SCOPE.titlePhrases.length).toBeGreaterThan(20);
+    expect(PRODUCT_ROLE_SCOPE.titlePhrases.length).toBeGreaterThan(20);
+    // Every product phrase names the function; none is an operations title.
+    expect(PRODUCT_ROLE_SCOPE.titlePhrases.every((t) => /product/i.test(t))).toBe(true);
+    expect(OPS_ROLE_SCOPE.titlePhrases.some((t) => /product/i.test(t))).toBe(true); // "Product Operations Manager"
   });
 });

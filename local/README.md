@@ -69,9 +69,14 @@ what's there.
   notes. `"roleScope": "ops"` or `"product"` takes a built-in preset as-is, and
   `{ "extends": "product", ... }` starts from one and overrides a few lists.
 
-  The field that catches people out is **`bareHeadIsCore`**: `false` where the
+  Two fields matter more than the rest. **`bareHeadIsCore`**: `false` where the
   head noun alone is noise ("Operations Manager" — every profession has one),
-  `true` where it is the job ("Software Engineer", "Product Manager").
+  `true` where it is the job ("Software Engineer", "Product Manager"). And
+  **`titlePhrases`**: the full job titles the *paid* search channel queries for,
+  one per rotating query. These are what gets asked, as opposed to the other
+  lists which filter what comes back — so if they name the wrong function you
+  pay for searches you don't want. A product candidate measured 0 of 8 queries
+  mentioning "product" before this was per-scope.
 
 - **resume.seed.json** — your base resume as structured data, not a static
   file. Each bullet has a stable `id`, `keywords`, and a `synonyms` map (a
