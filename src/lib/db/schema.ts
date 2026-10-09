@@ -157,6 +157,12 @@ export type SearchCriteria = {
    * src/lib/search/role-scope.ts.
    */
   roleScope?: string | (Partial<RoleScope> & { extends?: string });
+  /**
+   * The candidate's own description of what they're looking for — level, what
+   * they do, what they explicitly don't want. Input to `deriveRoleScope`,
+   * which turns it into `roleScope`; not read directly at search time.
+   */
+  targetStatement?: string;
 };
 
 /** Singleton row: candidate profile, work-auth defaults, and search criteria. */

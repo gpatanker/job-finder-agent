@@ -8,6 +8,7 @@ export type LlmCallSite =
   | "perplexity_discovery"
   | "exa_discovery"
   | "company_research"
+  | "role_scope"
   | "pipeline_analyst";
 
 // Approximate published per-million-token rates. These drive an *estimated*
