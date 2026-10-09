@@ -38,24 +38,47 @@ export const ATS_DOMAIN_FILTER = [
  * same ATS domain filter returned ZERO overlapping results — length alone
  * determines what slice of the index comes back. Firing several short
  * queries therefore reaches much more of the index than one long one, and
- * rotating which ones run each day (see rotateSlice below) means a rerun
- * doesn't just re-fetch yesterday's near-identical result set.
+ * rotating which ones run each time (see rotateSlice below) means a rerun
+ * doesn't just re-fetch the previous run's near-identical result set.
  */
 const ROLE_SYNONYM_POOL = [
-  "Operations Manager",
-  "Senior Operations Manager",
-  "Strategy and Operations Manager",
-  "Senior Strategy and Operations Manager",
-  "GTM Strategy and Operations Manager",
-  "Revenue Operations Manager",
-  "Sales Strategy and Operations Manager",
+  // Core Business / Strategy Operations
+  "Business Operations Manager",
   "Business Operations Lead",
   "Business Operations Analyst",
-  "Technical Operations Manager",
+  "Business Operations Associate",
+  "Senior Business Operations Manager",
+  "Strategy and Operations Manager",
+  "Senior Strategy and Operations Manager",
+  "Strategy and Operations Lead",
+  "Strategy and Operations Associate",
   "Operations Strategy Manager",
-  "Growth Operations Manager",
+  "Operations Manager",
+  "Senior Operations Manager",
+  "Operations Analyst",
+  "Business Strategy Manager",
+  // Infrastructure / capacity / data-centre — the family that has actually
+  // produced first-round interviews (Fluidstack, SpaceX, Base Power, WindBorne),
+  // and barely represented in the original pool.
+  "Infrastructure Operations Manager",
+  "Cloud Operations Manager",
+  "Data Center Operations Manager",
+  "Capacity Operations Manager",
+  "Capacity Planning Manager",
+  "Site Operations Manager",
+  "Field Operations Manager",
+  "Deployment Operations Manager",
+  "Technical Operations Manager",
+  "Technical Program Manager Operations",
+  // Commercial / vendor / product — in scope, distinct from GTM
+  "Commercial Operations Manager",
+  "Vendor Operations Manager",
+  "Procurement Operations Manager",
+  "Product Operations Manager",
+  "Program Operations Manager",
   "Partner Operations Manager",
-  "Marketplace Strategy and Operations Manager",
+  "Sales Operations Manager",
+  "Sales Strategy and Operations Manager",
 ];
 
 const ROLE_QUERIES_PER_RUN = 8;
@@ -93,18 +116,34 @@ function formatDateForPerplexity(date: Date): string {
 }
 
 /**
- * Deterministic day-based rotation, no persisted cursor required: which
- * slice of the pool a run draws from shifts by `salt` positions every day,
- * so back-to-back runs on the same day (fresh pass + widen pass) draw
- * disjoint slices, and tomorrow's run draws a different slice than today's,
- * without needing a DB column to remember where the last run left off.
+ * How often the rotation advances. Rotation used to be keyed to the calendar
+ * day, which quietly broke the common case of running the agent several times
+ * a day: every run after the first fired byte-identical queries, so whether
+ * anything new came back depended entirely on the search engine returning
+ * different results for the same question. Measured against that, Perplexity
+ * churned ~26% between runs and Exa ~11% — both leaving most of a rerun wasted.
+ * A 15-minute bucket means consecutive runs draw genuinely different phrases
+ * while still needing no persisted cursor and staying deterministic for tests.
  */
-function rotateSlice<T>(pool: readonly T[], count: number, salt: number): T[] {
+const ROTATION_BUCKET_MS = 15 * 60 * 1000;
+
+/**
+ * Draws slice number `sliceIndex` from the pool, advancing by a WHOLE slice
+ * each step rather than by one position. Advancing by one position was the
+ * other half of the problem: with 8 phrases per slice, the next offset shared 7
+ * of its 8 phrases with the previous one, so even when rotation did fire it
+ * barely changed the query set.
+ */
+function rotateSlice<T>(pool: readonly T[], count: number, sliceIndex: number): T[] {
   if (pool.length === 0) return [];
-  const epochDay = Math.floor(Date.now() / 86_400_000);
-  const offset = (epochDay + salt) % pool.length;
   const n = Math.min(count, pool.length);
+  const offset = ((sliceIndex * n) % pool.length + pool.length) % pool.length;
   return Array.from({ length: n }, (_, i) => pool[(offset + i) % pool.length]);
+}
+
+/** Which rotation step this run is on. Overridable so tests can pin it. */
+function currentRotationStep(seed?: number): number {
+  return seed ?? Math.floor(Date.now() / ROTATION_BUCKET_MS);
 }
 
 /**
@@ -144,6 +183,8 @@ export function buildDiscoveryQueries(params: {
   profile: CandidateProfile;
   lastRunDate?: Date | null;
   broaden?: boolean;
+  /** Pins the rotation step; defaults to a 15-minute time bucket. */
+  rotationSeed?: number;
 }): DiscoveryQuery[] {
   const criteria = params.profile.searchCriteria;
   const roleFamilies = criteria?.roleFamilies?.length
@@ -159,10 +200,12 @@ export function buildDiscoveryQueries(params: {
       : "AI infrastructure, cloud infrastructure, developer tools";
 
   const pool = [...new Set([...roleFamilies, ...ROLE_SYNONYM_POOL])];
-  // Widen pass draws the slice immediately after the fresh pass's slice
-  // (salt offset by ROLE_QUERIES_PER_RUN) so it's disjoint, not a repeat.
-  const salt = params.broaden ? ROLE_QUERIES_PER_RUN : 0;
-  const rolePhrases = rotateSlice(pool, ROLE_QUERIES_PER_RUN, salt);
+  // Each run consumes two consecutive slices: the fresh pass takes one and the
+  // widen pass the next, so the two are disjoint within a run AND the next run
+  // starts past both instead of re-drawing what this run just used.
+  const step = currentRotationStep(params.rotationSeed);
+  const sliceIndex = step * 2 + (params.broaden ? 1 : 0);
+  const rolePhrases = rotateSlice(pool, ROLE_QUERIES_PER_RUN, sliceIndex);
 
   const afterDate = params.lastRunDate ? formatDateForPerplexity(params.lastRunDate) : undefined;
   // Cold start (no prior run date yet): bound the very first query with a

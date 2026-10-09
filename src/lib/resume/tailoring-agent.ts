@@ -36,7 +36,12 @@ function buildTool(resume: ResumeData) {
         phraseChoices: {
           type: "object",
           description:
-            'Optional. Map of bulletId -> { originalPhrase: chosenText }. chosenText MUST be exactly one of the pre-approved synonym options given for that bullet/phrase — never invent new wording.',
+            'Optional. Map of bulletId -> { originalPhrase: chosenText }. chosenText MUST be exactly one of the pre-approved synonym options given for that bullet/phrase — never invent new wording. Do not use this for a bullet you are rewording via bulletRewrites.',
+        },
+        bulletRewrites: {
+          type: "object",
+          description:
+            "Optional. Map of bulletId -> reworded bullet text, rephrased to use the job posting's own vocabulary so it scores better in ATS keyword matching and reads better to a human reviewer. HARD RULES, enforced in code after you respond — a rewrite that breaks any of them is discarded: (1) Copy every number EXACTLY as written in the original, character for character. \"$3M\" must stay \"$3M\" — not \"$3 million\", not \"$3,000,000\". (2) Never add a number that is not already in that bullet. (3) Keep every proper noun and acronym from the original (NVIDIA, Netbox, JIRA, Tableau, Python, CSP, SLA, POS, Public Sector Partners...) and never introduce a company, tool, system or certification the original does not name. (4) Do not change what was accomplished, the scope, or the candidate's role in it — only the wording. (5) The rewrite must be NO LONGER than the original, measured in characters — the resume is one page and already full, so a longer rewrite is thrown away by the layout step. Substitute wording rather than adding it. USE THIS ACTIVELY. Work through every bullet and reword the ones where the posting has its own term for something the bullet already describes — that keyword match is what the ATS scores. Expect to reword roughly half the bullets on a well-matched posting. Only skip a bullet when the posting genuinely has no language for what it describes. Rewording is safe: the constraints above are verified in code after you respond, so attempt the rewrite rather than leaving a keyword on the table.",
         },
         skillsOrder: {
           type: "array",
@@ -105,6 +110,19 @@ function validatePlan(raw: unknown, resume: ResumeData): TailoringPlan {
     }
   }
 
+  const rewritesInput = input.bulletRewrites as Record<string, unknown> | undefined;
+  if (rewritesInput && typeof rewritesInput === "object") {
+    const validIds = new Set(resume.experience.flatMap((e) => e.bullets.map((b) => b.id)));
+    plan.bulletRewrites = {};
+    for (const [bulletId, text] of Object.entries(rewritesInput)) {
+      if (validIds.has(bulletId) && typeof text === "string" && text.trim()) {
+        // Only shape is checked here; the factual guarantees are enforced by
+        // validateRewrite() inside applyTailoring, which is the real boundary.
+        plan.bulletRewrites[bulletId] = text.trim();
+      }
+    }
+  }
+
   const skillsOrderInput = input.skillsOrder;
   if (Array.isArray(skillsOrderInput)) {
     const validCategories = new Set(resume.skills.map((s) => s.category));
@@ -122,10 +140,12 @@ function validatePlan(raw: unknown, resume: ResumeData): TailoringPlan {
 
 /**
  * Resume Tailoring Agent: given a job description, decides bullet order,
- * pre-approved phrasing swaps, and skill emphasis. Bounded — Claude can only
- * choose among the existing bullet inventory and its pre-approved synonym
- * sets (enforced by validatePlan here and again defensively in
- * applyTailoring), never generate new text. Runs a keyword-coverage
+ * phrasing swaps, bullet rewording, and skill emphasis. Bounded — Claude may
+ * reword a bullet into the posting's vocabulary, but every rewrite is re-checked
+ * by validateRewrite() inside applyTailoring and discarded unless it preserves
+ * the original's numbers verbatim and its named entities, so no rewrite can
+ * introduce a fabricated metric, tool or claim. Bullet IDs and skill categories
+ * are still validated against the fixed inventory. Runs a keyword-coverage
  * self-check and retries once if coverage is weak, then falls back to
  * deterministic keyword-overlap ordering if the API is unavailable or the
  * plan doesn't validate to anything useful.
@@ -149,9 +169,21 @@ export async function generateTailoringPlan(
     const inventory = buildInventoryDescription(resume);
 
     const systemPrompt =
-      "You are a resume-tailoring assistant. You may ONLY reorder the given bullets/skills and swap in phrasing from the pre-approved synonym lists provided. You must NEVER invent new bullet text, new skills, new numbers, or new claims. Every bullet ID for a company must appear exactly once in that company's order. Every skill category must appear exactly once in skillsOrder. Respond only via the submit_tailoring_plan tool.";
+      "You are a resume-tailoring assistant. Your job is to make this resume score well in an ATS keyword scan AND read well to a human reviewer, by aligning it with the job posting's own language.\n\n" +
+      "You have three tools for that: reorder bullets so the most relevant come first, swap in phrasing from the pre-approved synonym lists, and reword bullet text via bulletRewrites to match the posting's vocabulary.\n\n" +
+      "Rewording is the main lever for ATS keyword matching, so use it on every bullet where the posting has its own term for work the bullet already describes. Mirror the posting's nouns and verbs.\n\n" +
+      "THE RESUME MUST FIT ON ONE PAGE, and it is already full. Every rewrite MUST be the same length as the original or SHORTER — count the characters. A rewrite that runs longer is discarded by the layout step, so a longer rewrite is simply a wasted one. Swap words rather than adding them: replace a weaker verb or phrase with the posting's term, don't append the posting's term to what is already there.\n\n" +
+      "A HUMAN READS THIS TOO. A reworded bullet must read as natural professional English, not as keyword insertion. Never bolt a posting term onto a sentence where it doesn't belong grammatically, and never repeat the same inserted phrase across multiple bullets — two bullets in a row ending up with \"at scale\" tacked on is exactly the tell a recruiter notices. If a term can only be added awkwardly, leave that bullet alone: a clean un-reworded bullet beats a stuffed one.\n\n" +
+      "REWORDING IS REPHRASING, NOT REWRITING THE FACTS. Every number must be copied exactly as written, character for character. Never add a number. Never add a company, tool, system, metric or credential the bullet does not already name, and never drop one. Never change what was achieved, how big it was, or what the candidate's role in it was. If the posting's language genuinely doesn't fit a bullet, leave that bullet alone — an un-reworded bullet is always better than an inaccurate one.\n\n" +
+      "You must NEVER invent new bullets or new skills. Every bullet ID for a company must appear exactly once in that company's order. Every skill category must appear exactly once in skillsOrder. Respond only via the submit_tailoring_plan tool.";
 
-    const userMessage = `JOB DESCRIPTION:\n${jobDescription}\n\nRESUME BULLET INVENTORY (fixed — reorder and swap only from this):\n${inventory}\n\nProduce the tailoring plan that best aligns this resume with the job description.`;
+    // Hand the model the exact keyword gap rather than making it infer one.
+    const gaps = missingKeywords(resume, jobDescription).slice(0, 25);
+    const gapLine = gaps.length
+      ? `\n\nJOB-POSTING TERMS NOT CURRENTLY IN THE RESUME: ${gaps.join(", ")}\nWhere one of these genuinely describes work a bullet already covers, use that exact term when rewording it — and make it read naturally in the sentence. Ignore any that do not honestly apply; most of this list will not apply, and forcing them in reads as keyword stuffing to a human reviewer. Never reuse the same inserted phrase in more than one bullet.`
+      : "";
+
+    const userMessage = `JOB DESCRIPTION:\n${jobDescription}\n\nRESUME BULLET INVENTORY (the facts are fixed; the wording may be aligned to the posting):\n${inventory}${gapLine}\n\nProduce the tailoring plan that best aligns this resume with the job description. Use bulletRewrites on every bullet where the posting has its own wording for work the bullet already describes — that keyword overlap is what the ATS scores, and it is also what makes the resume read as written for this role. Keep all numbers and named entities exactly as they appear.`;
 
     const messages: Anthropic.MessageParam[] = [
       { role: "user", content: userMessage },
@@ -169,7 +201,7 @@ export async function generateTailoringPlan(
 
     let toolUse = response.content.find((c) => c.type === "tool_use");
     let plan = validatePlan(toolUse?.type === "tool_use" ? toolUse.input : null, resume);
-    let tailored = applyTailoring(resume, plan);
+    const tailored = applyTailoring(resume, plan);
     let coverage = scoreCoverage(tailored, jobDescription);
 
     if (coverage < COVERAGE_RETRY_THRESHOLD && toolUse?.type === "tool_use") {

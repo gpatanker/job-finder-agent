@@ -82,6 +82,42 @@ const CORE_DOMAINS = [
 ] as const;
 
 /**
+ * Go-to-market / revenue-motion domains. Present in a title, these disqualify it
+ * unless BIZOPS_RESCUE also matches — see classifyRoleFamily for the rationale
+ * and the evidence. "customer experience" sits here rather than in
+ * DISQUALIFYING_DOMAINS because it's a scope decision, not a hard mismatch;
+ * "customer success" is already handled as adjacent elsewhere.
+ */
+const GTM_SALES_DOMAINS = [
+  "gtm",
+  "go to market",
+  // "sales" is deliberately NOT here (candidate correction, 2026-09-13):
+  // Sales Operations and Sales Strategy & Operations are in scope. His AWS role
+  // was Business Operations Analyst on the Public Sector *Partners* team, so
+  // sales-adjacent ops is his actual background. Only GTM-branded and
+  // revenue/growth-motion titles are excluded.
+  "revenue",
+  "revops",
+  "rev ops",
+  "growth",
+  "customer experience",
+  "quota",
+  "pipeline",
+  "top of funnel",
+  "demand generation",
+] as const;
+
+/**
+ * Explicit Business-Operations markers that override a GTM word. Deliberately
+ * narrow — "business"/"bizops" only. Widening this to "strategy" would let
+ * every "GTM Strategy & Operations" title straight back in, which is exactly
+ * the family being excluded. Note normalizeForMatch collapses all punctuation
+ * to spaces, so "Business & Revenue Operations" arrives as
+ * "business revenue operations" — the phrase is written in that collapsed form.
+ */
+const BIZOPS_RESCUE = ["business operations", "business revenue", "bizops", "biz ops"] as const;
+
+/**
  * Domains adjacent enough to be worth surfacing but a weaker fit than the
  * core set — matched, then scored lower rather than silently dropped.
  * "compute"/"infrastructure" are in here specifically because
@@ -222,6 +258,17 @@ export type RoleFamilyTier = "core" | "strategy-ops" | "strategy" | "adjacent" |
  * the score can reuse the same classification rather than re-deriving it
  * (and so the real-world title corpus can be asserted directly in tests).
  */
+/**
+ * Whether a title is sales-side go-to-market rather than Business Operations.
+ * Exported so the same rule can be applied outside the classifier — e.g. to
+ * sweep already-queued suggestions when the scope decision changed — instead of
+ * re-implementing it and letting the two drift.
+ */
+export function isSalesSideGtmTitle(jobTitle: string): boolean {
+  const t = normalizeForMatch(jobTitle);
+  return hasAny(t, GTM_SALES_DOMAINS) && !hasAny(t, BIZOPS_RESCUE);
+}
+
 export function classifyRoleFamily(jobTitle: string): RoleFamilyTier {
   // An uncomparable title (non-Latin script, punctuation only) can't be
   // judged — reject rather than guess. This is the case that used to
@@ -231,6 +278,22 @@ export function classifyRoleFamily(jobTitle: string): RoleFamilyTier {
   const t = normalizeForMatch(jobTitle);
 
   if (hasAny(t, DISQUALIFYING_DOMAINS)) return null;
+
+  // Sales-side GTM is out of scope (candidate decision, 2026-09-13): he has
+  // BizOps/Strategy/Infra-Ops experience, not go-to-market experience, and the
+  // record agrees — 42 of 240 applications were GTM-flavoured and produced 2 of
+  // 9 interviews, both of which were BizOps titles that merely had "revenue" or
+  // "commercial" in them rather than sales-motion roles.
+  //
+  // The rescue clause matters as much as the rule: a GTM word does NOT
+  // disqualify a title that is also explicitly Business Operations. That keeps
+  // the shape that actually worked ("Associate, Business & Revenue Operations,
+  // Air Defense" — Anduril, interviewed) while dropping the ones that didn't
+  // ("Senior GTM Strategy & Operations Manager, Top of Funnel",
+  // "Senior Revenue Operations Manager", "Sales Strategy and Operations Lead").
+  // "commercial" is deliberately NOT listed — Redwood Materials' "Commercial
+  // Operations Manager" also produced an interview.
+  if (isSalesSideGtmTitle(jobTitle)) return null;
 
   const hasStrategy = hasAny(t, STRATEGY_HEAD);
   const hasBusinessOrStrategy = hasStrategy || t.includes(" business ");

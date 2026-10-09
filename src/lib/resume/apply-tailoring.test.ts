@@ -78,3 +78,58 @@ describe("applyTailoring", () => {
     expect(result.skills.map((s) => s.category)).toEqual(["Languages", "Tools"]);
   });
 });
+
+describe("applyTailoring — bullet rewrites", () => {
+  const resume: ResumeData = {
+    ...baseResume,
+    experience: [
+      {
+        company: "Acme Corp",
+        role: "Analyst",
+        dateRange: "2020 - 2022",
+        bullets: [
+          {
+            id: "acme-1",
+            text: "Recovered $3M in SLA credits across 12 vendors by owning an outage analysis process.",
+            keywords: ["SLA"],
+            synonyms: { vendors: ["vendors", "suppliers"] },
+          },
+        ],
+      },
+    ],
+  };
+  const rewriteOnly = (text: string) => ({ ...emptyTailoringPlan(), bulletRewrites: { "acme-1": text } });
+  const textOf = (r: ResumeData) => r.experience[0].bullets[0].text;
+
+  it("applies a rewrite that preserves numbers and entities", () => {
+    const good = "Drove recovery of $3M in SLA credits across 12 vendors by owning an outage remediation workflow.";
+    expect(textOf(applyTailoring(resume, rewriteOnly(good)))).toBe(good);
+  });
+
+  it("discards a rewrite that invents a metric, keeping the original", () => {
+    const bad = "Recovered $3M in SLA credits — up 40% — across 12 vendors by owning an outage analysis process.";
+    expect(textOf(applyTailoring(resume, rewriteOnly(bad)))).toBe(resume.experience[0].bullets[0].text);
+  });
+
+  it("discards a rewrite that invents a tool", () => {
+    const bad = "Recovered $3M in SLA credits across 12 vendors by owning a Datadog outage analysis process.";
+    expect(textOf(applyTailoring(resume, rewriteOnly(bad)))).toBe(resume.experience[0].bullets[0].text);
+  });
+
+  it("discards a rewrite that changes a number's magnitude", () => {
+    const bad = "Recovered $3B in SLA credits across 12 vendors by owning an outage analysis process.";
+    expect(textOf(applyTailoring(resume, rewriteOnly(bad)))).toBe(resume.experience[0].bullets[0].text);
+  });
+
+  it("prefers a valid rewrite over synonym swaps for the same bullet", () => {
+    const good = "Drove recovery of $3M in SLA credits across 12 vendors by owning an outage remediation workflow.";
+    const plan = { ...rewriteOnly(good), phraseChoices: { "acme-1": { vendors: "suppliers" } } };
+    expect(textOf(applyTailoring(resume, plan))).toBe(good);
+  });
+
+  it("falls back to synonym swaps when the rewrite is rejected", () => {
+    const bad = "Recovered $99M in SLA credits across 12 vendors by owning an outage analysis process.";
+    const plan = { ...rewriteOnly(bad), phraseChoices: { "acme-1": { vendors: "suppliers" } } };
+    expect(textOf(applyTailoring(resume, plan))).toContain("suppliers");
+  });
+});

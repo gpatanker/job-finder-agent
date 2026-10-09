@@ -7,15 +7,15 @@ This documents what's been verified, how, and the exact commands to reproduce it
 ```bash
 npx tsc --noEmit                    # typecheck — clean
 npm run build                       # production build — clean, all routes listed
-npm run test                        # Vitest: 44 tests, 12 files — all passing
+npm run test                        # Vitest: 295 tests, 31 files — all passing
 npm run test:e2e                    # Playwright E2E full-flow test (needs credentials)
 ```
 
-## Unit tests (Vitest, 44 tests / 12 files, no live services required)
+## Unit tests (Vitest, 295 tests / 31 files, no live services required)
 
 | Area | File | What it covers |
 |---|---|---|
-| Resume tailoring | `src/lib/resume/apply-tailoring.test.ts` | Bullet reordering, missing-ID fallback, **fabrication guard** (a phrase swap not in the pre-approved synonym list is silently rejected), skills reordering |
+| Resume tailoring | `src/lib/resume/apply-tailoring.test.ts` | Bullet reordering, missing-ID fallback, **fabrication guard** (a phrase swap not in the pre-approved synonym list is silently rejected), skills reordering — plus the reword path end to end: a valid rewrite is applied, one that invents a metric or a tool or changes a number's magnitude is discarded in favour of the original, a valid rewrite takes precedence over synonym swaps for the same bullet, and a rejected one falls back to them |
 | Deterministic fallback | `src/lib/resume/deterministic-tailoring.test.ts` | Keyword-overlap ranking of bullets/skills, empty-JD edge case, never sets `phraseChoices` |
 | Keyword extraction | `src/lib/text/keywords.test.ts` | Stopword removal, frequency ranking, limit — caught and fixed a real bug (trailing punctuation like `"negotiation."` wasn't stripped) |
 | Resume coverage scoring | `src/lib/resume/keyword-coverage.test.ts` | `scoreCoverage`/`missingKeywords` against a fixture resume |
@@ -26,6 +26,19 @@ npm run test:e2e                    # Playwright E2E full-flow test (needs crede
 | Packet readiness | `src/lib/packet/readiness.test.ts` | All 4 states (no_scan / scanned_empty / needs_approval / ready) |
 | Apply Run Brief | `src/lib/apply/brief.test.ts` | Submit-authorized vs. do-not-submit blocks, candidate basics, resume route, approved answers, "no approved prompts" case |
 | Slugs | `src/lib/resume/slug.test.ts` | Slugify + per-job resume slug generation |
+| **Rewrite guard** | `src/lib/resume/rewrite-guard.test.ts` | The safety boundary for LLM-reworded bullets: numbers must survive character-for-character (`$3M` → `$3 million` is rejected), no new digit run may appear, proper nouns/acronyms may neither be dropped nor invented, the leading action verb is exempt but a leading acronym is not, length must stay in a 0.55–1.6× band, and a bullet's own pre-approved synonyms count as supporting vocabulary |
+| **One-page fitter** | `src/lib/resume/fit-one-page.test.ts` | `countPdfPages()` against real rendered output, and the give-back priority order — length-adding items first, synonym swaps before keyword-bearing rewrites, older roles before the current one — plus the "base resume itself is too long" report when nothing is left to give back |
+| **Live-board identity** | `src/lib/search/live-board.test.ts` | `matchLiveJob` prefers an exact normalized-title match, takes the best-scoring loose match rather than the first, and returns `null` on a tie; `sameBoardUrl` ignores tracking params so one posting isn't seen as two |
+| Query rotation | `src/lib/search/perplexity-discover.test.ts` | Whole-slice rotation (consecutive steps share no phrases), fresh and widen passes drawing disjoint slices within a run, and `rotationSeed` pinning the step for determinism |
+| Role-family scope | `src/lib/search/known-company-boards.test.ts` | The GTM/revenue-motion exclusion and its Business-Operations rescue clause, asserted against the real title corpus — including that "Sales Operations" stays in scope while "Revenue Operations" does not |
+| Exa channel | `src/lib/search/exa-discover.test.ts` | Query parity with the Perplexity builder (the A/B's core assumption), the ATS domain filter sent as `includeDomains`, `excludeDomains` sent only for the opted-in tuned arm, date-format conversion (MM/DD/YYYY → ISO 8601), actual `costDollars` preferred over the modelled rate card, citation dedupe across queries, and partial results plus a warning when some queries fail or the key is unset |
+| Employer research | `src/lib/company/company-context.test.ts` | Cache-key normalization (punctuation/case collapsed so one employer is cached once; a nameless company yields an empty key callers treat as a no-op) and `formatCompanyContext` rendering — empty string when there is no profile so the prompt is unchanged, the signals line omitted when research found none, and the instruction not to claim anything the bullets don't support |
+
+### Known coverage gaps
+
+- **The self-URL short circuit in `resolveCandidateFreshness` is not unit-tested.** It is the fix for the URL-rewrite bug described in [`ARCHITECTURE.md`](ARCHITECTURE.md#identity-not-similarity) and was verified by observed behaviour in production runs (net-new suggestions per run going from 1 to 31), not by a test. `resolve-freshness.test.ts` covers the fail-open paths around it but not this branch.
+- **`getCompanyContext`'s caching and staleness logic is not unit-tested.** `company-context.test.ts` covers the pure helpers (`companyKeyFor`, `formatCompanyContext`); the 120-day staleness window, the insert/update path and the fail-soft-to-`null` behaviour all require a DB and were verified by use, not by test.
+- **`generateTailoringPlan`'s plan validation is only covered for the retry path.** `tailoring-agent.test.ts` asserts the `tool_result` regression; the `bulletRewrites` shape-validation branch is exercised indirectly through `apply-tailoring.test.ts` rather than directly.
 
 ## Playwright E2E (`tests/e2e/full-flow.spec.ts`)
 

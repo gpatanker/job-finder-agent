@@ -121,10 +121,71 @@ export async function fetchLiveBoardJobs(board: AtsBoard): Promise<LiveBoardJob[
  * catches that case without weakening the original direction.
  */
 export function matchLiveJob(jobs: LiveBoardJob[], title: string): LiveBoardJob | null {
+  // 1. Exact (normalized) title match always wins. Without this, a board
+  //    carrying both "Strategy & Operations Associate" and "Strategy &
+  //    Operations Division Lead" could resolve the second to the first purely
+  //    because it is listed earlier.
+  const exact = jobs.find((j) => normalizeForCompare(j.title) === normalizeForCompare(title));
+  if (exact) return exact;
+
+  // 2. Otherwise fall back to the loose bidirectional check — but score every
+  //    candidate and take the BEST, not the first. Returning the first loose
+  //    match is what caused dozens of distinct postings at high-volume boards
+  //    (DoorDash, Verkada, Notion) to all collapse onto whichever similar
+  //    title happened to appear first, which both corrupted the title↔URL
+  //    pairing and made genuinely new postings look like duplicates.
+  let best: { job: LiveBoardJob; score: number } | null = null;
   for (const job of jobs) {
-    if (textMentionsTitle(job.title, title) || textMentionsTitle(title, job.title)) return job;
+    if (!(textMentionsTitle(job.title, title) || textMentionsTitle(title, job.title))) continue;
+    const score = titleSimilarity(job.title, title);
+    if (!best || score > best.score) best = { job, score };
+  }
+  // 3. A genuinely ambiguous result (several equally-good matches) is a signal
+  //    we can't identify the posting, not licence to pick one — treat it as
+  //    unmatched rather than silently binding the candidate to a coin flip.
+  if (best) {
+    const tied = jobs.filter(
+      (j) =>
+        (textMentionsTitle(j.title, title) || textMentionsTitle(title, j.title)) &&
+        titleSimilarity(j.title, title) === best!.score
+    );
+    if (tied.length > 1) return null;
+    return best.job;
   }
   return null;
+}
+
+function normalizeForCompare(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Symmetric word-overlap (Jaccard) between two titles, 0–1. */
+function titleSimilarity(a: string, b: string): number {
+  const aw = new Set(normalizeForCompare(a).split(" ").filter(Boolean));
+  const bw = new Set(normalizeForCompare(b).split(" ").filter(Boolean));
+  if (aw.size === 0 || bw.size === 0) return 0;
+  let inter = 0;
+  for (const w of aw) if (bw.has(w)) inter++;
+  return inter / (aw.size + bw.size - inter);
+}
+
+/**
+ * Whether two board URLs point at the same posting. Compares host + path
+ * only, so tracking/query differences (`?gh_jid=`, `?utm_source=`) don't make
+ * the same posting look like two.
+ */
+export function sameBoardUrl(a: string, b: string): boolean {
+  const norm = (u: string) => {
+    try {
+      const x = new URL(u);
+      return `${x.hostname.toLowerCase()}${x.pathname.replace(/\/+$/, "").toLowerCase()}`;
+    } catch {
+      return null;
+    }
+  };
+  const na = norm(a);
+  const nb = norm(b);
+  return na !== null && na === nb;
 }
 
 const EMBED_SCRIPT_TOKEN_REGEX = /greenhouse\.io\/embed\/job_board\/js\?for=([a-zA-Z0-9_-]+)/i;

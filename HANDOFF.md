@@ -2,7 +2,7 @@
 
 **Purpose:** If this conversation is lost and you're starting fresh, read this file top to bottom before doing anything else. It captures the state, decisions, and hard-won operational knowledge that aren't visible just from reading the code. Update it as things change — it's meant to stay current, not be a one-time snapshot.
 
-Last updated: 2026-08-03.
+Last updated: 2026-10-02.
 
 ---
 
@@ -95,7 +95,7 @@ Confirm: `.env.local` is filled in and `npm run dev` boots, `npm run db:seed-pro
   - **Two related bugs fixed in the same pass**: `specificity-check.ts` now rejects bare ATS board-root URLs with no job ID (`job-boards.greenhouse.io/{token}` with nothing after it, e.g. the real case `job-boards.greenhouse.io/snorkelai?error=true`, which previously slipped through since the token itself isn't an enumerable "generic" path segment). `live-board.ts`'s `matchLiveJob` now checks title overlap in **both** directions — the original one-directional check could wrongly mark a posting closed when the LLM-extracted candidate title was longer/more qualified than the board's own shorter title (e.g. "Senior GTM Strategy & Operations Manager, Enterprise" vs. the board's plain "GTM Strategy & Ops Manager").
   - **Validated 2026-07-28**: same-day rerun immediately after shipping these fixes found 289 raw candidates (up from 23) and added **65 net-new suggestions across 43 companies** (up from 0). The per-company diversity cap (`MAX_NEW_SUGGESTIONS_PER_COMPANY` in `route.ts`) alone filtered 127 of those 289 — clearly the binding constraint now that real volume is flowing — so it was raised from 2 to 4 in the same pass. Industry-context queries (AI/cloud/infra, energy/climate, defense/govtech) stay deliberately separate narrow queries, not merged into one — a 2026-07-22 diagnostic found merging them makes Perplexity default to whichever term is most emphasized ("AI" drowning out everything else); this is unchanged by the 07-27/28 rewrite, don't re-merge them.
   - **The 65-suggestion validation run itself turned out to be low-precision — fixed same day (2026-07-28, second pass).** Manual review of the results surfaced real garbage from the new `known-company-boards.ts` channel: Recruiting/Warehouse/HR Ops roles, a non-US Guadalajara posting, and (worst case) a Databricks listing written entirely in Japanese ("ソリューションアーキテクト (プリセールス)" — Solution Architect, Pre-sales) — all scored a flat 55/100. Root causes, found and fixed by an Opus review: (1) the bare 2-word phrase `"Operations Manager"` in the matching pool exact-substring-matched *any* `"<anything> Operations Manager"` title, so the qualifying domain was unconstrained; (2) a 70%-word-overlap fallback counted the stopword "and", letting "Recruiting Operations **and** Programs Manager" match "Strategy **and** Operations Manager"; (3) the bidirectional `matchLiveJob` check added earlier that same day had a real bug — a title in a non-Latin script normalizes to an empty string in `freshness-check.ts`'s `normalizePhrase`, and the old `if (!normalizedTitle) return true` early-return turned that into a wildcard that matched every target phrase at once. **Fixes**: `textMentionsTitle` now distinguishes "genuinely empty title" (still trivially true) from "non-empty title that normalizes to nothing" (now `false`) — see the new `isComparableTitle()` export, with the two other fail-open callers (`isLikelyClosed`, `scoreJobUrl`) explicitly guarded so they don't misread "can't verify" as "role is gone." `known-company-boards.ts`'s matcher was replaced entirely — `classifyRoleFamily()` is a structural test (must name an ops/strategy function AND a domain that's actually his, must NOT name a disqualifying specialization like Recruiting/HR/Warehouse/IT/Clinical/Billing ops) instead of fuzzy text overlap, plus a location check (`isLikelyNonUsLocation`) using US/non-US place-name marker lists. Scoring (`scoreLiveBoardMatch`) went from a flat-bucket heuristic that produced a near-constant 55 to a tiered deterministic score (60–88 spread) — deliberately kept deterministic rather than routed through a second Claude call, since this channel only ever has a bare title to score (no description/salary/location context an LLM could reason over) and free-ness is the whole point of the channel. The main Claude-scored rubric in `job-search-agent.ts` got a matching tightening after an audit of all 172 historically-scored suggestions found the same blind spot in the procurement/sourcing family (3 real candidate dismissals: OpenAI "Strategic Sourcing Manager, Compute", Google "GPU Commodity Manager...", Lambda "Procurement & Operations Lead" — all scored 74-82) — the old rubric's "higher for" clause literally rewarded "vendor ops," which has been removed. 22 of the 65 validation-run suggestions were confirmed false positives under the new logic and dismissed; 2 borderline judgment calls (Anthropic "Data Operations Manager, Human Data", Scale AI "TPM, Gen AI Operations Planning") were left to the candidate — both kept.
-  - **Perplexity vs. Exa vs. Gemini, evaluated 2026-07-27**: staying on Perplexity was the right call — every yield failure traced back to query construction, not the vendor (the same API found 157 good candidates once queried properly). Gemini's web-grounding tool was ruled out entirely (opaque redirect URLs instead of real links, no domain/date filter — wrong shape for a pipeline that needs verifiable deep links). Exa has one genuine edge (`excludeDomains`, vs. Perplexity's include-only `search_domain_filter`) but it mostly stops mattering once every query is ATS-domain-filtered anyway, which it now is; revisit only if adjacency/recall becomes the bottleneck again after the above fixes are given time to work.
+  - **Perplexity vs. Exa vs. Gemini, evaluated 2026-07-27**: staying on Perplexity was the right call — every yield failure traced back to query construction, not the vendor (the same API found 157 good candidates once queried properly). Gemini's web-grounding tool was ruled out entirely (opaque redirect URLs instead of real links, no domain/date filter — wrong shape for a pipeline that needs verifiable deep links). Exa has one genuine edge (`excludeDomains`, vs. Perplexity's include-only `search_domain_filter`) but it mostly stops mattering once every query is ATS-domain-filtered anyway, which it now is; revisit only if adjacency/recall becomes the bottleneck again after the above fixes are given time to work. **That condition was met and the revisit happened on 2026-09-10 — see "Exa vs Perplexity, measured" below. The headline conclusion changed: the two engines are complementary, not substitutes.**
 - `src/lib/search/specificity-check.ts`: rejects generic "careers page" URLs unless they carry a `gh_jid`/`ashby_jid` query param, or the URL is a bare ATS board root (see above).
 
 ## Candidate facts & default answers (also in Claude Code memory, but here for redundancy)
@@ -150,13 +150,316 @@ A fresh 85-suggestion batch from the direct-board-poll channel (`known-company-b
 
 Fixed in both `known-company-boards.ts`'s `classifyRoleFamily()`/`DISQUALIFYING_DOMAINS` (the free heuristic channel) and `job-search-agent.ts`'s LLM system prompt (mirrored for consistency across both discovery channels) — see git log for the exact diff. Deliberately scoped narrow in two places after review: the engineering exclusion is "engineer(s)" only, not the broader "engineering" (so "Engineering Strategy & Operations Manager" — a legitimate BizOps-for-the-eng-org title — stays in scope, since only bare "...Engineer" IC titles were ever evidenced as unwanted); and the "Strategic Partnerships"/"Strategic Customer Success Manager" sub-pattern (Mercury, Flex, Ōura, Notion, Plaid, Snowflake Alliance, Ashby, SentiLink, Watershed, Retell AI — 12 titles) was caught by the same classifier fix but wasn't individually named by the candidate; asked directly, he said restore all 12 to the queue rather than treat that sweep as settled — they're back in `job_search_suggestions` as `status='new'`, the code still classifies future postings of this shape as non-qualifying (SpaceX's "International Infrastructure Operations Specialist (Starlink)" was separately dismissed, but only because of a concurrent SpaceX interview — see Claude Code memory — not because the role itself is out of scope).
 
-## Current pipeline state (as of 2026-07-28)
+## The live-board matcher was rewriting URLs to the wrong job — fixed 2026-09-12
 
-**145 real jobs on file: 115 applied, 28 blocked, 1 archived, 1 discovered (Vanta, not yet triaged).** **40 untriaged suggestions** in `job_search_suggestions` (`status='new'`) as of the precision pass above — the original 65-suggestion batch from the rewritten search pipeline (see below) was fully triaged (applied to, or blocked, across Datadog, DoorDash, Figma, Flex, Harper, Harvey, Hinge Health, Mixpanel, Notion, OpenAI, OpenFX, Pendo, PermitFlow, Picogrid, Plaid, Rillet, Samsara, Scale AI, Sierra AI, Snowflake, SpaceX, Verkada, Watershed, Zip, among others), then a *second*, larger board-poll batch (85 suggestions) surfaced and got precision-cleaned down to 40 per the section above — those 40 are worth an actual triage pass next. See git log for the batch history from the 2026-07-20 snapshot (51 applied/15 blocked) onward.
+**Symptom:** a search run added only 1-2 suggestions and looked like the market was exhausted. It wasn't. `found: 373, skipped: 363, added: 1` — and independently, 55 of the board-poll's 345 candidates were genuinely not in the DB. The gap was a real bug, not saturation.
+
+**Root cause:** `matchLiveJob` in `live-board.ts` returned the **first** board posting whose title passed `textMentionsTitle` in either direction. That helper falls back to **>=70% word overlap** for titles of 3+ words — a rule written for matching a title against a whole *page*, where it's reasonable, but far too loose for title-against-title. On boards with many near-identical titles (DoorDash had ~26 distinct "Strategy & Operations" roles, Verkada and Notion similar) every candidate matched whichever similar title was listed first, and `resolveCandidateFreshness` then **rewrote the candidate's applyUrl to that other job's URL**.
+
+Two distinct harms, and the second is worse:
+1. The rewritten URL usually collided with an already-known URL, so genuinely new postings were silently counted as duplicates (`skipped`) and never inserted. Hence "only two jobs populating."
+2. Anything that *did* get through was stored with **one job's title and a different job's apply link.** This is the actual cause of the title/URL mismatches hit during the 2026-09-10 apply run — OpenAI's "Partnerships Operations Lead" whose link opened "Government Partnerships Communications Lead", and Faire's "Strategy & Operations Lead" whose link opened the London "International" role. Those were logged at the time as bad search metadata; they were this bug.
+
+**Fix (two parts):**
+- `resolve-freshness.ts`: if the candidate's own `applyUrl` is itself a currently-open posting on that board (new exported `sameBoardUrl`, host+path comparison so `?gh_jid=`/`?utm_source=` don't matter), return it **untouched** with `recovered: false`. The board-poll channel's URLs come straight off the board and never needed recovering at all.
+- `live-board.ts`: `matchLiveJob` now prefers an exact normalized-title match, otherwise scores every loose match by symmetric word overlap and takes the **best** rather than the first, and returns `null` when the top score is tied (ambiguous is not licence to guess). The 2026-07-28 bidirectional behaviour is preserved — a reworded title like "Senior GTM Strategy & Operations Manager, Enterprise" still matches the board's "GTM Strategy & Ops Manager", and there's a test pinning that.
+
+**Measured before/after on the same DB state:**
+
+| | before | after |
+|---|---|---|
+| added | 1 | **31** |
+| skipped as known | 363 | 305 |
+| `recovered` (URL rewrites) | 159 | **4** |
+| filteredDiversityCap | 0 | 22 |
+
+`recovered` falling from 159 to 4 is the tell — ~155 of those "recoveries" were spurious rewrites. The diversity cap now actually fires (DoorDash correctly capped at 4/run) because real candidates finally reach it.
+
+**Watch for:** any suggestion whose stored title doesn't match what its apply link opens is this bug's fingerprint. Rows created before 2026-09-12 may still carry mismatched title/URL pairs — verify the live posting before promoting an older row, which the apply-run skill already tells you to do.
+
+## Exa vs Perplexity, measured (2026-09-10) — they are complementary, not substitutes
+
+The 2026-07-27 desk evaluation picked Perplexity and deferred Exa. On 2026-09-10 that was re-run as an actual A/B, prompted by the search queue drying up (a production run found 376 candidates, 96% already known). **The result overturned the assumption behind both the original choice and the swap that was being considered.**
+
+Code: `src/lib/search/exa-discover.ts` (drop-in counterpart to `discoverCandidatePostings`, same signature/return type) and `scripts/compare-search-providers.mts` (the harness). `EXA_API_KEY` is in `.env.local`/`.env.example`. **The live pipeline still runs on Perplexity — nothing was switched.**
+
+**Result (batch 2, the clean run; 11 identical queries per arm, scored against one frozen 201-company snapshot):**
+
+| Arm | Returned | Usable | Usable rate | New co. | Cost | Wall |
+|---|---|---|---|---|---|---|
+| Perplexity | 184 | 150 | 81.5% | 79 | $0.055 | 0.8s |
+| Exa (parity) | 152 | 141 | 92.8% | 75 | $0.153 | 3.3s |
+| Exa (tuned, `excludeDomains`) | 162 | 153 | 94.4% | 80 | $0.165 | 3.0s |
+
+- **The engines barely overlap.** Given byte-identical queries and the same domain filter, Jaccard on usable URLs was **0.08–0.11**. Of 137 previously-unseen companies, only 22 were found by both. **Running both would yield +73% new companies vs Perplexity alone, for +$0.17/run** — the original "swap Perplexity for Exa" framing was the wrong question. **But see the correction below: the recommendation is now "don't add Exa yet."**
+- **Exa is meaningfully more precise**: ~94% of returned URLs were usable live deep links vs Perplexity's ~82%, reproducible across both batches. Perplexity returns more raw volume with more waste.
+- **Perplexity churns, Exa repeats**: run-to-run Jaccard 0.74 vs 0.89 over ~25 minutes. Perplexity's instability is a cheap source of fresh coverage on a daily rerun; Exa's determinism means new coverage must come from new queries.
+- **Cost**: Perplexity $5/1k flat regardless of result count (so `MAX_RESULTS_PER_QUERY = 20` is free); Exa $7/1k for ≤10 results **plus $1/1k for additional results**, i.e. ~$0.017/request at 20 results. Per new company: $0.0007 (Perplexity) vs $0.0021 (Exa) vs $0.0016 (both).
+- **Exa rate-limits at 10 req/s** and returns `429 RATE_LIMIT_EXCEEDED`; a naive `Promise.all` over the 11-query set trips it and silently loses a query. `exa-discover.ts` caps concurrency at 5. Perplexity has no comparable limit at this volume.
+- **Exa returns `costDollars` per response**, so its cost figures here are actual, not modelled. Perplexity's are inferred from the rate card.
+
+**Two harness bugs found in batch 1, both fixed before batch 2 — don't reintroduce them:** the ATS board slug (`andurilindustries`) was being compared against DB display names (`Anduril Industries`), marking nearly everything "new"; and the Exa arms silently ran 10 of 11 queries. **Methodology that must be preserved if this is re-run:** both arms share `buildDiscoveryQueries()` verbatim, and *nothing is persisted* — the production route excludes already-seen pairs forever, so if one arm wrote its finds first the other would be scored against a DB the first had already claimed.
+
+**Caveat on "new companies":** it means an ATS slug not matching any known company after normalization; it does **not** check role scope, so off-target companies are counted. It's a relative measure between arms, not an absolute discovery count.
+
+**CORRECTION (2026-09-13) — the recommendation changed to "don't add Exa yet", for two reasons:**
+
+1. **The premise was a bug, not a real limit.** The case for a second engine rested on "discovery is exhausted — 376 candidates, 96% already known." That 96% was substantially the live-board URL-rewrite bug manufacturing false duplicates (see the section directly above). With it fixed, Perplexity + the free board poll alone went from 1 new suggestion per run to **31**. Adding a paid second vendor to solve a problem that was mostly a bug would have been the wrong call. Re-evaluate only if the queue genuinely dries up again.
+2. **The harness's "live-verified" metric was looser than described.** `compare-search-providers.mts` calls `resolveCandidateFreshness` with `title: ""`, and an empty title trivially passes `textMentionsTitle` — so under the old matcher it matched the first job on the board and returned ok for essentially any URL whose company board responded. It measured "is this an ATS deep link on a live board", **not** "is this posting still open". **Fix this before re-running**: thread the real per-result title through (Exa returns `title`; Perplexity returns `title`), since post-fix `matchLiveJob` now returns null on an empty title (all scores tie at 0), which would make the harness report ~0 usable for every arm.
+
+What survives unchanged: the near-zero overlap between the engines (Jaccard 0.08–0.11 — measured on returned URLs, same filter both arms), the cost figures, the 10 req/s rate-limit finding, and run-to-run stability. The precision finding is directionally intact but measures link/host quality rather than posting liveness.
+
+Full write-up (built for an Exa interview on 2026-09-14): https://claude.ai/code/artifact/16472bf6-2f8f-4e76-9c29-b1d99824d42d
+
+## Search scope narrowed: GTM / revenue-motion is out, Sales Ops is IN (2026-09-13)
+
+The candidate stated he has no go-to-market experience and does not want GTM-focused roles. The data agrees: **42 of 240 applications were GTM-flavoured and produced 2 of 9 first-round interviews**, and both of those ("Associate, Business & Revenue Operations, Air Defense" at Anduril, "Commercial Operations Manager" at Redwood Materials) are BizOps titles that merely contain "revenue"/"commercial" — not sales-motion roles. Every other interview is a pure operations title.
+
+**Out:** GTM Strategy & Operations, Revenue Operations / RevOps, Revenue Strategy & Operations, Growth Strategy & Operations, Customer Experience Strategy & Operations, and anything centred on quota / pipeline / top-of-funnel / demand generation.
+
+**Sales Operations is IN** — corrected by the candidate the same day after an initial answer that excluded it. "Sales Operations", "Sales Strategy & Operations" and plain "Strategy & Operations" are all in scope; his AWS role was Business Operations Analyst on the Public Sector **Partners** team, so sales-adjacent ops is his actual background. The word "sales" is therefore deliberately absent from `GTM_SALES_DOMAINS` — don't re-add it.
+
+**Explicitly still in — do not over-apply the rule:** a title that is explicitly *Business* Operations even when it also names revenue (the Anduril shape); *Commercial* Operations (the Redwood shape); *Product* Operations (PermitFlow — interviewed); and all Business Ops / Strategy & Ops / Infrastructure & Data-Center Ops / Capacity Ops targets.
+
+Implemented in three places, all of which must stay in step:
+- `known-company-boards.ts` — new exported `isSalesSideGtmTitle()` (GTM_SALES_DOMAINS minus a narrow BIZOPS_RESCUE), called from `classifyRoleFamily`. Exported specifically so the same rule can sweep already-queued rows rather than being re-implemented and drifting. **BIZOPS_RESCUE is deliberately narrow ("business operations", "business revenue", "bizops") — widening it to "strategy" readmits the whole excluded family.** Note `normalizeForMatch` collapses punctuation, so "Business & Revenue Operations" must be written "business revenue".
+- `job-search-agent.ts` — mirrored as a hard sub-40 rule in the LLM scoring prompt, with the real example titles. The older sales-IC rule's note that "Sales Operations / Revenue Operations remain fully in scope" was amended, since it now contradicts this.
+- `candidateProfile.searchCriteria.roleFamilies` — "GTM Operations" and "RevOps" removed (11 -> 9).
+
+Several pre-existing tests used GTM titles as their *on-target* fixtures and had to be re-pointed at BizOps equivalents — that was a deliberate scope change, not a weakening of the rule. 246 tests pass.
+
+**Open question, do not guess at it:** immediately after setting this rule the candidate manually dismissed **36 of 38** queued suggestions, keeping only Ramp "Product Operations Specialist" (54) and Cerebras "Manager - AI Infrastructure Operations" (55). The dismissals include core BizOps at match 88 (Motive x3, Fluidstack), all six DoorDash Strategy & Ops roles, both Harvey Product Ops roles and Verkada's Commercial Ops — i.e. families he had explicitly said to keep minutes earlier. That is either a bulk clear-out of a stale queue or a much narrower scope than stated. **Ask before encoding anything narrower**; inferring a rule from that sweep would gut the search.
+
+## Resume tailoring can now reword bullets (2026-09-16)
+
+The tailoring agent previously could only reorder bullets and swap pre-approved synonyms; it could not change wording. The candidate asked for JD-keyword-driven rewording — "as long as key numbers and the context is not changed... nothing should be fabricated just reworded based on job posting" — **explicitly with no approval step**. Since there is no human gate, the invariants are enforced in code.
+
+**`src/lib/resume/rewrite-guard.ts` is the safety boundary.** `validateRewrite(original, rewrite, approvedVocabulary)` accepts a reword only if:
+1. every number is preserved **verbatim, character for character** — "$3M" may not become "$3 million" or "$3,000,000". Reformatting is refused on purpose: once it's allowed, a faithful reformat is indistinguishable from a magnitude slip ("$3M" → "$3B").
+2. no new number appears anywhere;
+3. every proper noun / acronym survives and none is invented (no new company, tool, system or credential);
+4. length stays within 0.55–1.6x.
+A failing rewrite is **silently discarded and the original text used** — never an error.
+
+Two refinements found by running it for real, both worth keeping:
+- **The rewrite's first word is exempt from the entity check.** It's the action verb and must be free to change. An allowlist of verbs was tried first and immediately failed on "Cut" — that list will never be complete, and every miss silently costs a legitimate rewrite. An acronym in the lead position is still checked.
+- **A bullet's own pre-approved synonyms count as supported vocabulary** (`approvedVocabulary`, passed from `applyTailoring`). Without this the guard rejected "go-to-market efforts" → "GTM efforts" even though "GTM efforts" is literally in that bullet's synonym list.
+
+Wiring: `TailoringPlan.bulletRewrites` (bulletId → text); `applyTailoring` prefers a *valid* rewrite, else falls back to synonym swaps (a reworded bullet no longer contains the synonym keys, so the two are mutually exclusive per bullet); the agent's tool schema and system prompt carry the constraints, and the user message now includes `missingKeywords()` so the model is handed the exact keyword gap instead of inferring it.
+
+**The prompt had to be made directive.** A first pass worded cautiously ("reword only when...") produced **zero** rewrites — the model declined to use the capability at all. Telling it to expect to reword roughly half the bullets, and that the constraints are verified in code afterwards, took it to 13 proposed / 13 accepted. If rewrites ever drop to zero again, suspect prompt caution before suspecting the plumbing.
+
+Measured on the Google posting: coverage **60 → 65**, 13 of 13 rewrites accepted, and an independent audit confirmed every number in the rendered resume is identical to the master. **The master resume is never written to** — rewording is per job, which is the thing that was explicitly reverted on this same day when a tailoring pass had edited the master instead.
+
+Docs updated to match (README, ARCHITECTURE) — both previously stated the agent "can never invent new resume content" by construction. The guarantee is now enforced by verification rather than by construction, which is a real change in kind and is described as such.
+
+## The tailored resume must stay one page — enforced 2026-09-16
+
+**Bullet rewording silently produced a 2-page resume on its very first real run.** Total bullet text grew by **1%** and that was enough: the master resume is deliberately tuned to fill exactly one page with almost no slack, and pdfkit adds an overflow page without complaint. Nothing in the pipeline was checking, so a 2-page PDF was uploaded and attached to the job.
+
+`src/lib/resume/fit-one-page.ts` now guarantees it, wired into `generate-resume/route.ts`:
+- `countPdfPages()` counts `/Type /Page` objects (excluding the `/Pages` tree node) — the fit is verified against the **actually rendered PDF**, never estimated from character counts.
+- `fitPlanToOnePage()` re-renders in a loop, giving rewrites back until it fits. Bullet ordering and synonym swaps are never touched — they carry the relevance gains and barely affect length.
+
+Two ordering rules, both learned from real failures rather than guessed:
+1. **Sacrifice the oldest role's rewrites first.** A purely greedy largest-delta-first rule stripped all four Together AI rewrites (his current role, the one a recruiter reads first and an ATS weights most) while keeping every AWS 2022-2024 one. Now sorted by section index descending, then delta.
+2. **Character delta is only a proxy for height.** An equal-or-shorter rewrite can still wrap to an extra line. The first version only ever dropped length-*increasing* rewrites, so when those ran out it stopped and wrongly reported "the master resume itself is too long for one page" — on a master that renders as one page. Now two-phase: growers first, then any remaining rewrite, and `overflowsWithoutRewrites` is only true once **every** rewrite has been given back.
+
+Coverage is re-scored after fitting, on the resume that actually shipped — the agent's own number is computed before the fit hands rewrites back and would otherwise overstate the PDF being sent.
+
+Verified over three consecutive real runs: 1 page every time, coverage 65/65/68, with 5-12 of 13 rewrites surviving depending on the plan. **If the master resume ever grows, this degrades quietly** — rewrites get dropped to buy space and tailoring silently weakens before anything breaks. The `[generate-resume] ... dropped N rewrite(s)` warning is the early signal; a `... too long for one page` warning means the master itself needs trimming.
+
+## Company research feeds the tailoring agent (2026-09-16)
+
+New table `company_profiles` + `src/lib/company/company-context.ts`. The tailoring agent previously saw a job description and a company name and nothing else, so it couldn't know that Google Cloud's AI2 team is infrastructure-adjacent — the single fact that decides whether to lead with GPU-capacity work or generic BizOps process work.
+
+`getCompanyContext(company)` returns a cached profile — summary, domain tags, and "what this employer likely values in an ops hire" — researching once via **2 Perplexity searches + 1 Sonnet call (~$0.01)** when absent or older than 120 days. **Cached by normalized company name, not per job**: this pipeline sees the same ~200 employers repeatedly (Anduril 25+ times), so per-job research would buy the same answer dozens of times. Measured: 8.2s on a cache miss, **63ms and free** on a hit. Fails soft everywhere — no key, no network, thin results, or bad output all return null and tailoring proceeds exactly as before. The `db` import is lazy (same convention as `llm-usage.ts`) so the pure helpers unit-test without `DATABASE_URL`.
+
+Live output for Google included "large-scale operations and capacity planning across global infrastructure" and "vendor/partner management" — both of which map directly onto real bullets, which is the point.
+
+**The one-page fitter had to be reworked twice more before this was actually usable**, and the order it gives things back matters more than it sounds:
+
+1. **Synonym swaps add length too.** The first fitter only touched rewrites. A real run dropped *every* rewrite, still rendered 2 pages, and reported "the master resume itself is too long" — on a master that renders as one page. Swaps like "Negotiated" → "Drove procurement negotiations for" are 20+ characters longer and were never being reconsidered.
+2. **Give back swaps BEFORE rewrites.** Once swaps were included, the naive order still sacrificed rewrites first — stripping every keyword-bearing rewrite while leaving the longer swaps that caused the overflow. A rewrite carries the posting's actual vocabulary (what an ATS scores); a swap is just an alternate phrasing. Current order: things that grew → swaps before rewrites → older roles before the current one → biggest space win.
+
+Result went from `rewritesKept=0` on every run to **0 rewrites dropped, 1 swap given back, 1 page, coverage 60-63** across three consecutive runs.
+
+**Two prompt lessons, both of which cost a tuning cycle:**
+- **Cautious wording produces zero rewrites.** Already noted above; adding an anti-keyword-stuffing paragraph re-triggered it and dropped output from 13 proposed to 1-4. If rewrites fall off, suspect prompt caution first.
+- **Tell the model the page is full.** The resume is one page with no slack, so any rewrite that adds characters gets discarded by the fitter — wasted work. The prompt now states the rewrite must be no longer than the original and to *substitute* wording rather than append it. Model output moved to deltas of −9, −9, −9, +1, which survive the fit instead of being thrown away.
+- Anti-stuffing guidance is still in the prompt and earning its place: an earlier run bolted "at scale" onto two consecutive bullets, exactly the tell a recruiter notices.
+
+## Query rotation is per-run now, not per-day (2026-09-17)
+
+**The agent is run several times a day, and every run after the first was firing byte-identical queries.** Two compounding causes in `perplexity-discover.ts`:
+
+1. `rotateSlice` keyed its offset to `Math.floor(Date.now() / 86_400_000)` — the calendar day. Same day, same slice.
+2. The pool held **14 phrases** and a run consumes two slices of 8 (fresh + widen = 16). One run exhausted the entire pool, so there was nothing left to rotate *to* even in principle.
+
+On top of that, the offset advanced by **one position** per step, so consecutive slices shared 7 of their 8 phrases — rotation barely changed the query set even when it did fire.
+
+Net effect: runs 2-4 of a day depended entirely on the search engine returning different answers to the same question. Measured at 25-minute spacing, Perplexity churns ~26% between identical runs and Exa ~11%. That is the real reason **Perplexity suits this usage better than Exa** despite Exa winning decisively on single-run link quality — see the bake-off section above. Uncontrolled vendor churn was doing the job that rotation should have been doing.
+
+**Fixed:**
+- `ROTATION_BUCKET_MS = 15 min` replaces the day bucket, with an optional `rotationSeed` param so tests pin it.
+- `rotateSlice(pool, count, sliceIndex)` advances by a **whole slice**, not one position.
+- A run takes two consecutive slices (`step * 2` and `step * 2 + 1`), so fresh/widen are disjoint within a run *and* the next run starts past both.
+- Pool grown **14 → 32 phrases**, weighted toward infrastructure / capacity / data-centre / field ops — the family that has actually produced first-round interviews (Fluidstack, SpaceX, Base Power, WindBorne) and was barely represented before.
+- Dropped `GTM Strategy and Operations Manager`, `Revenue Operations Manager`, `Growth Operations Manager` — those families were excluded on 2026-09-13, so the search was paying to fetch results the classifier then rejected. `Sales Operations Manager` and `Sales Strategy and Operations Manager` were kept: Sales Ops is explicitly in scope.
+
+**Measured:** consecutive runs now share **0 of 16** role phrases, with reuse starting only on the third run (the effective pool after merging the profile's own role families is ~41 phrases, giving ~2.5 fully-disjoint runs). Two real back-to-back runs added **15 then 9** net-new suggestions; previously the second would have contributed nothing from the Perplexity channel.
+
+**If more same-day runs are wanted**, the lever is pool depth: four fully-disjoint runs needs ~64 phrases. Don't pad it with near-duplicates — a weak phrase costs a whole query slot.
+
+**Unchanged and worth remembering:** the free `known-company-boards` channel is the one that genuinely surfaces *intra-day* novelty. It polls ~167 live boards directly, so a role posted at 2pm shows up in a 3pm run regardless of query rotation or search vendor.
+
+## Current pipeline state (as of 2026-09-08)
+
+**371 real jobs on file: 231 applied, 138 blocked, 1 archived, 1 discovered (Google, "Associate, Business Operations and Strategy", untriaged since 2026-08-26).** **12 untriaged suggestions** in `job_search_suggestions` (`status='new'`), all from the 2026-09-08 search run below; the other 630 suggestion rows are fully resolved (372 promoted, 258 dismissed). Between the 2026-07-28 snapshot and this one, ~226 jobs were added across batch sessions (biggest single day: 45 on 2026-08-17) — the 40 untriaged suggestions described in the precision-pass section above were worked through weeks ago. See git log and the `jobs` table's `created_at` for the batch history.
+
+**226 jobs currently need the `approvalStatus` sweep** (terminal `status` but `approval_status = 'pending'`) — the structural gap described in the architecture section above. It was 4 jobs at the last snapshot; it grows with every batch and nothing has fixed it at the source yet, so the Overview page's "Pending review"/"Awaiting approval" tiles are currently meaningless. Run the documented `UPDATE` before trusting them.
+
+**Search run of 2026-09-08**: 376 raw candidates (339 of them from the free `known-company-boards.ts` board-poll channel), 355 skipped as already-known, 9 filtered closed, **12 net-new added** — and notably 0 filtered by the per-company diversity cap and 0 by the generic/blocked-source checks. The widen pass fired (as it does whenever a run lands under `TARGET_NEW_SUGGESTIONS = 20`). A ~96% already-known rate is the expected steady state now that ~370 jobs and ~630 suggestions are on file: the binding constraint has moved from precision (the 2026-07-28 problem) to market exhaustion within the known-company set. If future runs keep landing in the single digits, the lever is new companies in the discovery pool, not more query rotation.
+
+**Running a search headlessly**: every `/api/*` route is gated by `src/proxy.ts` → `updateSession()`, which 401s unauthenticated API calls, so `curl` against a local dev server won't work without a Supabase session cookie. The proxy only runs on real HTTP requests, so the simplest path from a Claude Code session is to import and call the route handler directly — write a `.mts` file (top-level `await` fails under tsx's default cjs transform for a plain `.ts`) that does `import { POST } from "@/app/api/search/run/route"`, then run `node --env-file=.env.local ./node_modules/.bin/tsx <file>.mts` from the project root so the `@/` tsconfig path alias resolves. Takes ~2 minutes end-to-end. Ad-hoc DB queries work the same way with the `postgres` package directly, as `scripts/*.mjs` already do.
 
 **New pattern from recent batches, worth keeping**: always freshness-check *and sanity-check the actual role* (location, comp, eligibility) before promoting a `jobSearchSuggestions` row — the search agent can return a title/company match that's real and live but still a bad fit (e.g. a "Business Operations Manager" suggestion that turned out to be Remote-UK-only for a US-based candidate). Match score alone doesn't catch this; read the live posting.
 
 **New ATS encountered**: Rippling's own hosted ATS — see the `apply-run` skill for the details (Cloudflare challenge, autofilled Location field needing correction, how to confirm submission success).
+
+## Apply-run batch, 2026-09-10 (14 jobs) — what the ATSes did
+
+First batch driven end-to-end from a search-queue triage. **9 submitted, 5 blocked.** Submitted: Watney, Serval, Vanta, Anthropic, Baseten, Faire (RevOps), Pallet, Medra, Hostie. The 5 blocks are the useful part:
+
+- **Three of the five blocks were bad search metadata, not ATS problems** — the live posting did not match what `job_search_suggestions` recorded. Faire "Strategy & Operations Lead" (recorded NYC/SF, $158-219k) is really **"International Strategy and Operations Lead," London UK**. OpenAI "Partnerships Operations Lead, OAI for Government" is really **"Government Partnerships Communications Lead," Department: Communications** — a comms role, out of scope. Turing "Strategy & Operations Manager" had closed between the search run and the apply run. This is the HANDOFF "sanity-check the actual role before promoting" rule earning its keep three times in one batch; **read the live posting's own `h1` and location line before filling anything**, and expect the board-poll channel (title-only data) to be the offender.
+- **OpenAI enforces a hard application cap**: submitting returns "we have set up limits for applications across roles. Candidates may not apply more than 5 times in any 180 day span." The cap is already exhausted, so **every OpenAI role is unapplicable until the window rolls over** — don't queue more, and treat the scorer's existing "OpenAI is overrepresented" penalty as a hard stop rather than a score nudge. Same shape as the documented Fluidstack limit.
+- **Greenhouse can serve a degraded, unsubmittable page to automation.** On Gusto, the `intl-tel-input` phone/country widget rendered 0x0 so Country never registered, and after every field validated clean the submit button went disabled and hung with no confirmation. The tell is in the network log: `POST boards.greenhouse.io/{org}/jobs/{id}` returning **HTTP 428 Precondition Required** (anti-bot precondition). A clean reload did not fix it. Check for 428 before assuming a filling bug and burning a second pass.
+- **Lever (`jobs.lever.co`) is effectively closed to automation**: submit is gated behind hCaptcha (hidden `#hcaptchaSubmitBtn`, repeated `api.hcaptcha.com/getcaptcha` POSTs) plus a Cloudflare challenge. Everything else on the form works — fill it completely, then hand it to a human to solve the captcha and click submit.
+
+Other mechanics worth keeping:
+
+- **The Ashby email React-desync is common, not rare** — it hit on the first form of the batch. Cheap prophylactic: always type Email with real keystrokes (`pressSequentially`) rather than `fill()` on Ashby. When a "form needs corrections" banner names a field, apply the documented clear -> verify-empty -> retype fix; do not retype over a `fill()`ed value.
+- **Never set a React-controlled input with a programmatic value setter.** Doing that to an Ashby field produced a value that was visible in the DOM, survived verification, and was still reported empty at submit.
+- **Greenhouse react-select: match the option exactly, don't type-and-Enter.** Typing "Male" filtered to **"Female"** (substring match) and silently selected the wrong EEO answer on Gusto. Enumerate the listbox (`aria-controls` -> `[role=option]`) and click the option whose text matches exactly. Also scope that query to the field's own listbox — a hidden `intl-tel-input` country list (`.iti__country`) pollutes any global `[role=option]` selector.
+- **Ashby "When can you start a new role?" is a `react-datepicker`, not a text field** (placeholder "Pick date..."). Free text never sticks; type a date like `10/12/2026` and click the highlighted day.
+- **Answering Hispanic/Latino = No reveals a separate required Race dropdown** (seen on Anthropic) — re-scan for new required fields after each answer rather than trusting the initial field list.
+- Rippling's autofilled **Location** defaulted to the job's location (San Francisco) instead of the candidate's, exactly as documented — correct it to Fremont, CA every time.
+
+**Answers that had to be invented and should be confirmed with the candidate**: a required start-date/timeline field (answered "flexible, no hard deadlines" on Baseten; 2026-10-12 on OpenAI) and OpenAI's **Applicant Arbitration Agreement** acknowledgement, which is mandatory to submit. **GPA (3.5)** was supplied by the candidate mid-run for Lever/Hive and is not in any seed file — consider adding it to `profile.seed.json`, since it is a required field on some forms.
+
+**A pipeline gap this batch exposed**: `PATCH /api/agent-runs/{id}` (`updateAgentRunSchema`) accepts no `submitAuthorized` field, and `candidateProfile.requiresSponsorship` is still stuck `true`, so every generated brief said "DO NOT SUBMIT" even though submission was authorized. **Partly resolved 2026-09-17**: `createAgentRunSchema` *does* accept `submitAuthorized`, so the flag can be set at run-creation time via `POST /api/agent-runs` — no raw SQL needed. It still cannot be changed after the fact, so a run queued from the UI without it stays wrong; adding it to `updateAgentRunSchema` is still worth doing, as is fixing the stale `requiresSponsorship` flag.
+
+
+## Apply-run batch, 2026-09-17 (14 jobs) — second end-to-end batch
+
+**11 submitted, 1 blocked, 2 dismissed pre-flight.** Submitted: Headway (Payer Partnerships Lead), Notion, Fieldguide, Mach9, DoorDash, Splice, Conversion, Cogent Security, FurtherAI, Headway (Business Operations Manager), Ramp, Giga Energy. Every tailored resume rendered at one page, so `fit-one-page.ts` held across a full batch.
+
+- **Samsara blocked on geography, not the ATS**: the form states the role is open to US candidates *except* California (among others), and the candidate is in Fremont, CA. Marked blocked rather than submitted. This is a new failure mode — an eligibility constraint stated only on the application form, not in the posting metadata the search agent captured.
+- **Cerebras "Manager – AI Infrastructure Operations" was already dead**, and the app caught it: `POST /api/agent-runs` returned **HTTP 422** with "the posting appears to be closed or no longer available" before any browser work. The Greenhouse URL did in fact 404 on manual check. That precondition check is trustworthy — verify once, then `PATCH /api/jobs/{id}` to `blocked` / `posting_removed` and move on.
+- **Zero title/URL mismatches this batch**, against 3 of 14 last time. That is the `matchLiveJob` fix (2026-09-12) showing up in outcomes rather than just in the `added` count.
+- **Two GTM-department roles still reached the queue** — FurtherAI's "Strategy & Operations Associate" and Headway's "Payer Partnerships Lead" both sit in a GTM/partnerships org despite non-GTM titles. The 2026-09-13 scope rules filter on *title*, and a department line that only appears on the live posting can't be caught that way. Both were on the user's approved list and were submitted with the mismatch flagged. If this recurs, the fix is a live-posting department check at promote time, not more title keywords.
+- **Ramp asked four custom essays** (product-ops experience, data→product improvement, working with engineering, an AI tool that changed how you work). All four were written from `storyBankEntries` + `questionBankEntries` rather than improvised — the scrape had not surfaced them, which is the documented "clean scrape isn't proof" trap again.
+
+New ATS mechanics (details in the `apply-run` skill): Ashby Yes/No questions are `button[data-option]` with `aria-pressed`, **not** radios, and their hidden checkbox has no `label[for]`; Ashby's other option groups *do* have `label[for=...]`, which is the reliable way to read exact option text and the safest thing to click. Greenhouse can withhold required Phone/Country fields from the DOM until a first submit attempt fails — the first failure is expected, not a bug.
+
+
+## Apply-run batch, 2026-09-21 (6 suggestions) — small queue, two new failure modes
+
+Queue was 6 `job_search_suggestions`, all created that morning. **4 submitted, 1 blocked, 1 dismissed.** Submitted: Valence (Strategy & Ops Associate), Pure Storage/Everpure (Sr Sales Ops Manager, Federal), Ambience Healthcare (Business Operations Lead), Fin/Intercom (Sr Sales Operations Manager). All four tailored resumes rendered at one page.
+
+- **Cloudflare "Developer GTM Strategy Manager" dismissed** — GTM in the title, out of scope since 2026-09-13. Worth noting it reached the queue at all with `match=74`: the title contains the literal token "GTM" that `GTM_SALES_DOMAINS` already lists, so this suggestion came through a path that doesn't run `isSalesSideGtmTitle`. Worth tracing if GTM titles keep appearing.
+- **Cohere blocked by a reapplication cooldown, discovered only at submit.** The Ashby form accepted a fully filled application and then replaced it with "Our records show you were considered for this role in the past ... 1-year waiting period from the original rejection." **No prior Cohere row existed in `jobs`**, so that earlier application was made outside this system — the pipeline cannot dedupe against applications it never saw, and this will recur. Cohere's form also gates hard on 2+ yrs top-tier consulting AND 2+ yrs investment banking; both were answered No truthfully.
+- **`submitAuthorized` now works end to end.** All five runs were created via `POST /api/agent-runs` with `submitAuthorized: true` and came back `auth: true`. Separately, `candidateProfile.requiresSponsorship` now reads **`false`** — the long-standing stale flag is fixed, so briefs should stop saying "DO NOT SUBMIT".
+- **The analyst has a floor, and that is correct behavior**: `POST /api/analyst/run` returned `ran: false` — "Only 4 new applications and 0 new interviews since the last report — needs 10+ applications or 1+ new interview." Don't force it on a small batch.
+
+**A resume/profile contradiction surfaced and needs resolving.** `candidateProfile.totalYearsExperience` says **8**, but `resumeProfile.data.experience` totals roughly **3.6 years worked** — AWS Mar 2022–May 2024, Lambda Jun 2024–Mar 2025, Together AI Feb 2026–present, with a Mar 2025–Feb 2026 gap. Ambience gates on "4 or more years in consulting/BizOps/strategy" and Fin's posting asks for 5+ years in Sales/Revenue Ops, so this is not academic — it changes answers on real screening questions. The candidate was asked directly and chose **Yes (4+)** for Ambience, No for the optional "5+ yrs hyperscaling Tech/SaaS". Either the resume is missing earlier roles or the profile number is wrong; resolve it once rather than per-application.
+
+**Daily sweep**: Exa progressed — intro call Thu 2026-09-17, then a next-round invite (30 min with their GTM team) scheduled Tue 2026-09-22. `firstRoundInterviewAt` was already set to 2026-09-10, and the schema tracks only the first round, so nothing was written. Andromeda Cluster interviewed Fri 2026-09-18 but came via an external recruiter and stays out of `jobs`, as before.
+
+New ATS mechanics went to the `apply-run` skill: a Greenhouse field that scans as `INPUT:text` can still be a react-select (Fin's "Current Location" is a region list, and typing a country returns zero options — open it empty); Greenhouse checkbox ids contain `[]` and need a label click; and the Ashby email desync can survive `pressSequentially`, still needing the full clear/verify/retype cycle.
+
+
+## Single-job run, 2026-09-22 (Watershed) + the first return from the Sept batches
+
+**Watershed "Customer success operations" submitted** (Ashby, NYC on-site, $154,160-$183,300, resume coverage 57 — the highest of any recent tailor). Applied at the candidate's explicit request **despite** the standing GTM/CS-Ops scope exclusion: the live posting's department is literally "Revenue / GTM Operations", and it asks for 5+ yrs GTM Ops (or 4+ hands-on). He has applied to two similar Watershed CS roles before, so this is a deliberate carve-out for this employer, not a scope change. Don't widen the search rules on the strength of it.
+
+**Mach9 came back — interview #10.** `aburke@mach9.io` on 2026-09-22: reviewed the Business Operations Associate application and wants to connect. That application went out on 2026-09-17, so the turnaround was five days. Recorded `firstRoundInterviewAt = 2026-09-22` on job `d073c68b`.
+
+**`updateJobSchema` silently drops `firstRoundInterviewAt`.** `PATCH /api/jobs/{id}` returned **200** and changed nothing — the field isn't in the schema (`createJobSchema.partial()` plus status/approvalStatus/applyAgentStatus/applyReviewConfirmed/blockReason), so zod strips it and the route reports success. Same family as the old `submitAuthorized` gap, and worse because it fails silently rather than erroring. It was written directly with Drizzle instead; that field has no cascade logic, so a direct write is safe here. **Add it to the schema** — the daily sweep needs it on every run.
+
+**Rejections are now arriving in volume, and the schema has nowhere to put them.** Between 2026-09-17 and 2026-09-22: Ramp (Product Ops Specialist | Juno), Fieldguide, Headway (Payer Partnerships Lead), Conversion, Samsara (Product Ops Mgr), Hostie, NVIDIA, Scale AI, Pendo, Capital One, Axial. Four of those are from the 2026-09-17 batch — a ~4-day rejection turnaround. `jobs.status` has a `rejected` value that nothing currently sets, so the pipeline still counts all of these as `applied` and the interview-rate denominator is the only outcome signal being tracked. Worth wiring the daily sweep to set `rejected` the same way it sets `firstRoundInterviewAt`.
+
+**Outside the pipeline**: Supermicro has an active process (final round 2026-08-21, recruiter following up 2026-09-21) with no row in `jobs` — applied outside this system. Google sent a referral invitation from Bhavesh Jain on 2026-09-21 ("apply to up to 3 jobs in 30 days") and acknowledged an application the same day.
+
+
+## Apply-run batch, 2026-09-23/24 (7 suggestions) — 5 submitted, 1 blocked, 1 dismissed
+
+Submitted: Augment (Business Operations & Strategy Manager), Oklo (Deployment Project Manager), Oklo (Technical Program Manager, Recycling Division), CodePath (Senior AI Operations Lead), Anduril (Product Operations Specialist, Air Defense C2). All five resumes one page. Coverage ranged 23-55 — CodePath lowest, because the employer is education/nonprofit rather than infrastructure.
+
+- **Pallet "GTM Strategy: Products and Markets" dismissed** — GTM in the title, same rule as the 2026-09-21 Cloudflare dismissal.
+- **Hive blocked without attempting it.** The suggestion's `applyUrl` was the Lever **board root** (`jobs.lever.co/hive/`) rather than a posting, and both other Hive roles are already blocked. Lever is hCaptcha-gated, so filling the form would produce nothing a human could finish from a Playwright-controlled browser. Resolved the real posting URL (`.../70d6122f-...`), wrote it onto the job row, and marked it `anti_bot_captcha`. **If Gaurav wants Hive, it has to be done by hand.**
+- **Anduril's "Product Operations Specialist" is in scope even though "Product Operations Technical Specialist" repeatedly wasn't.** Read the duties before reusing the earlier `out_of_scope_action` judgement: this one is fleet source-of-truth ownership, RMA/RCCA feedback loops, and SOPs across Salesforce/JIRA/Airtable — genuine product ops, not the technician-flavored work those other titles carried.
+- **Augment's department is "2. Go To Market"** despite a Business Operations & Strategy title — the third instance of this pattern after FurtherAI and Headway. Title-based scope filtering cannot catch it; only the live posting shows it.
+
+New ATS mechanics (all in the `apply-run` skill): Oklo's Greenhouse board makes **Cover Letter required but hides it behind a generic "Attach" label** — it only surfaces as an error after a failed submit, and the fix is the field's own "Enter manually" button revealing `#cover_letter_text`. Oklo's **export-control question is an A/B/C multiple choice** whose bare letters are meaningless without the long label above it (A = U.S. Person). Anduril's citizenship free-text fields **tell US citizens to answer "N/A"**, but country of birth has no such shortcut.
+
+**Two cover letters were written by hand this batch** (both Oklo reqs). Nothing in the pipeline generates cover letters — the Answer Generation Agent only handles form questions. If cover-letter-required boards become common, that's a real gap.
+
+**Sweep (2026-09-23)**: Mach9 scheduled its first round for Tue 2026-09-29 11am PDT. **Exa advanced to a take-home**, assigned 2026-09-23 and due Sunday 2026-09-27 evening (he negotiated the date himself); the recruiter confirmed the remaining process is take-home -> another interview -> on-site at SF HQ. Outside the pipeline: an **Oracle referral** from Viresh Amin for "Business Operations Program Manager, Data & Automation (IC4)" needs action from Gaurav, and a GLG expert-network invite arrived (not a job).
+
+
+## Apply-run batch, 2026-09-29/30 (10 suggestions) — 7 submitted, 3 dismissed
+
+Submitted: Curri (Strategy & Ops Mgr, Supply Growth), Coram AI (Sr Strategy & Ops Mgr), Serval (Business Systems Lead), Rula (Sr Business Operations Mgr), Crux AI (Chief of Staff Business Operations), Human Interest (Sales Strategy & Ops Sr Analyst), Anthropic (Strategy & Operations, Office of the CCO). All seven one page; coverage 23-57.
+
+**Three dismissed, and two of the three were bad data rather than bad fit:**
+- **Waymo "Business Operations Lead" does not exist.** The suggestion carried a board-**root** URL (`embed/job_board?for=Waymo`). `boards-api.greenhouse.io/v1/boards/waymo/jobs` lists **357** open roles and **zero** matching that title. This is the first confirmed fabricated title in the pipeline, not merely a stale or mismatched one. The board-root URL is the tell — pair it with that JSON API check before promoting.
+- **Crux AI "Data Center Operations Program Manager" is really "Data Center Energy Manager"** (Department: Development) — negotiating interconnection, tariffs and supply agreements with utilities and ISOs/RTOs, and owning an energy P&L. A specialist energy-markets role, out of scope, and a different title from what was recorded.
+- Crusoe "Revenue Operations Manager, Deal Desk" — RevOps, the standing exclusion.
+
+**Serval is the fourth title/department mismatch in three weeks** (after FurtherAI, Headway, Augment): title "Business Systems Lead", department "Revenue Strategy and Operations". Handled the established way — title in scope, department flagged, applied. Four instances is now a pattern worth fixing at promote time rather than noting each run.
+
+**Two answers that needed judgement, both logged on the runs:**
+- **Rula required a legal middle name.** It is in neither `candidateProfile` nor `resumeProfile`. Entered "Manish" on the evidence of "Gaurav Manish" appearing on his own travel-account mail, and flagged for confirmation. **Add the middle name to the profile.**
+- **Anthropic requires two acknowledgements**: their AI partnership guidelines for candidates, and a binding **Agreement to Arbitrate** waiving jury trial for application-related disputes. Both mandatory; the candidate should know the second one exists.
+
+Curri gates on a trivia question — the plumber who sparked the founders' idea (**Mike Buck**), answerable from press coverage.
+
+**Sweep (2026-09-29/30) — the pipeline is converting now:**
+- **Baseten is interview #11**, previously unrecorded: recruiter outreach 2026-09-16 for Capacity Strategy & Operations. Recorded `firstRoundInterviewAt = 2026-09-16`. The recruiter no-showed the 09-29 call and is rescheduling.
+- **Mach9** first round held 2026-09-29.
+- **Exa**: take-home submitted 09-28, case-review interview with Isaak booked **Tue 2026-10-06 12:30pm PDT**, then an SF on-site.
+- **Base Power on-site Thu 2026-10-01**, 9am-12:30pm PDT at Austin HQ, travel being arranged — a working-session presentation format.
+- Outside the pipeline: Palantir (Tomer Solomon, Deployment Strategist) chat pending; Supermicro final round from 08-21 still unresolved after three follow-ups; Oracle referral still needs action.
+- Rejections since 09-24: GitLab, Join Parachute, Valence, Cloudflare.
+
+**Analyst re-ran (triggered by the new interview) and hardened its earlier finding**: 11 interviews across 269 applications (~4%), and **8 of 11 came from match<=70**, mostly physical/infrastructure/deployment ops at energy and robotics companies. Its recommendation is now explicit: the match score is *anti-correlated* with interviews, stop deprioritizing sub-70 roles, and actively source more capacity/site/deployment ops work. It also flags chronically low resume coverage (15-45) as a tailoring problem. Still n=11, still directional — but it has survived two independent runs.
+
+
+## BASE POWER EXTENDED AN OFFER (2026-10-01)
+
+`awilliams@basepowercompany.com`, 2026-10-01: "We're thrilled to extend you an offer to join the Base team," with a Dropbox Sign signature request for "Offer to join Base Power Company." This followed the Austin on-site on 10-01 (working-session format). **This is the pipeline's first offer.**
+
+**The schema cannot represent it.** `JOB_STATUSES` runs discovered -> ... -> applied, blocked, rejected, archived. There is no `offer` state and no offer date column, so the best outcome the system has ever produced is invisible to it — the Base Power row still reads `applied`. Adding an `offer` status (and an `offerAt`) is now the highest-value schema change outstanding, ahead of the `rejected` gap noted below.
+
+## Apply-run batch, 2026-10-02 (17 suggestions) — 10 submitted, 2 blocked, 5 dismissed
+
+Submitted: Indigo ×2 (Business Operations Associate; Business Operations & Strategy Manager), Crux/clean-energy (Business Operations Lead), Rula (Strategy & Ops Manager, In-person), Vannevar Labs (Senior Business Operations Manager), Everpure (Business Operations Manager, Product Tools), Motive (Sales Operations Manager, Implementation), Scale AI (Product Operations Lead, Generative AI), Faire (Strategy & Operations Senior Associate), Ripple (Product Operations, Analyst). All one page; coverage 18-53.
+
+**Five dismissed — three on scope, two on bad metadata:**
+- Hello Heart (Senior Manager, **Revenue Operations**), Scale AI (**Revenue Operations** Manager), Planet Labs (Sales Strategy & **GTM** Planning) — standing exclusions.
+- **Armada** "Senior Sales Strategy & Operations Manager" is really **"Senior Events Operations Manager"**.
+- **Anthropic** "Strategy & Operations, FDE" is really **"GTM Strategy & Operations, FDE"** — the GTM lives in the real title, not the recorded one. That makes four title mismatches caught in two batches; the suggestion titles are unreliable often enough that live verification is now load-bearing, not belt-and-braces.
+
+**Two blocked:**
+- **Giga ML (Chief of Staff, $200-220K)** — `eligibility_gate_unresolved`. A required multi-select offers only Consulting / IB / PE / Startup Founder / VC with no "none of the above". None is true, so the form is unanswerable without fabricating. **Note the name collision**: board `gigaml` is a different company from Giga Energy (`gigaenergy`), already applied to — same trap as Crux AI (`crux`) vs Crux clean-energy (`cruxclimate`), both of which also appeared this batch.
+- **DualEntry (Chief of Staff, NYC)** — retryable. Ashby's geo-autocomplete died mid-batch (see the skill), leaving a required location field unfillable. Everything else was filled.
+
+**Two answers that were inferred rather than known**, both flagged on their runs: Indigo's required **Interview Recording Consent** (AI notetaker) was answered Yes, and Motive's required **"select your top 3 tangible factors"** was answered Career Growth / Leadership / Company Outlook from the story bank's stated goals. Neither is in the profile; both are worth adding if these recur.
+
+**Rula's second req gates on 5+ years** and was answered No per the candidate's own 2026-09-21 threshold call — honest, but it will almost certainly auto-screen out. He may want to revisit that answer now that it has cost a second application.
+
+**Sweep also found**: Mach9 advanced to a 30-min interview with Alex, **Mon 2026-10-05 12:30pm PDT**. Exa's case review with Isaak is **Tue 2026-10-06 12:30pm PDT** (take-home submitted 09-28). Baseten's rescheduled intro ran **Fri 2026-10-02 5:30pm CDT**. Human Interest rejected the 09-30 application **in one day**. Also rejected since 09-30: GitLab, Join Parachute, Cloudflare, Valence. A "Massed Compute — Business Operations Manager" application confirmation arrived 09-30 that this pipeline did not send — applied outside the system.
 
 ## Where to look for more
 

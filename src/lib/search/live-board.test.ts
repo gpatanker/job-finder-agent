@@ -5,6 +5,8 @@ import {
   fetchGreenhouseJobById,
   fetchLiveBoardJobs,
   matchLiveJob,
+  sameBoardUrl,
+  type LiveBoardJob,
 } from "./live-board";
 
 describe("detectAtsBoard", () => {
@@ -263,5 +265,72 @@ describe("fetchGreenhouseJobById", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network error")));
     const result = await fetchGreenhouseJobById("buildops", "6100196004");
     expect(result).toEqual({ status: "error" });
+  });
+});
+
+describe("matchLiveJob — picking among similar titles on one board", () => {
+  // Regression: matchLiveJob used to return the FIRST job whose title passed a
+  // loose >=70% word-overlap check. On boards carrying many near-identical
+  // titles (DoorDash had ~26 distinct "Strategy & Operations" roles) every
+  // candidate collapsed onto whichever similar title was listed first, which
+  // both bound candidates to the wrong URL and made new postings look like
+  // duplicates of an already-known one.
+  const board: LiveBoardJob[] = [
+    { title: "Sales Strategy and Operations Associate", url: "https://job-boards.greenhouse.io/verkada/jobs/1" },
+    { title: "Sales Strategy and Operations Division Lead", url: "https://job-boards.greenhouse.io/verkada/jobs/2" },
+    { title: "Associate, Pricing & Commercial Operations", url: "https://job-boards.greenhouse.io/verkada/jobs/3" },
+  ];
+
+  it("returns the exactly-matching posting, not an earlier similar one", () => {
+    const m = matchLiveJob(board, "Sales Strategy and Operations Division Lead");
+    expect(m?.url).toBe("https://job-boards.greenhouse.io/verkada/jobs/2");
+  });
+
+  it("still matches a lightly reworded title (the 2026-07-28 behaviour)", () => {
+    const m = matchLiveJob(
+      [{ title: "GTM Strategy & Ops Manager", url: "https://x/1" }],
+      "Senior GTM Strategy & Operations Manager, Enterprise"
+    );
+    expect(m?.url).toBe("https://x/1");
+  });
+
+  it("returns null when two postings are equally good matches rather than guessing", () => {
+    const tied: LiveBoardJob[] = [
+      { title: "Strategy and Operations Manager", url: "https://x/a" },
+      { title: "Operations and Strategy Manager", url: "https://x/b" },
+    ];
+    expect(matchLiveJob(tied, "Manager Strategy Operations")).toBeNull();
+  });
+
+  it("reports no match when nothing on the board resembles the title", () => {
+    expect(matchLiveJob(board, "Principal Hardware Engineer")).toBeNull();
+  });
+});
+
+describe("sameBoardUrl", () => {
+  it("ignores tracking query params", () => {
+    expect(
+      sameBoardUrl(
+        "https://job-boards.greenhouse.io/acme/jobs/123?gh_jid=123",
+        "https://job-boards.greenhouse.io/acme/jobs/123"
+      )
+    ).toBe(true);
+  });
+
+  it("ignores a trailing slash", () => {
+    expect(sameBoardUrl("https://x.io/a/b/", "https://x.io/a/b")).toBe(true);
+  });
+
+  it("treats different job ids as different postings", () => {
+    expect(
+      sameBoardUrl(
+        "https://job-boards.greenhouse.io/acme/jobs/123",
+        "https://job-boards.greenhouse.io/acme/jobs/456"
+      )
+    ).toBe(false);
+  });
+
+  it("is false for an unparseable url", () => {
+    expect(sameBoardUrl("not a url", "not a url")).toBe(false);
   });
 });
