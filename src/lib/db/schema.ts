@@ -404,13 +404,6 @@ export type AnalystRecommendation = {
 };
 
 /**
- * One row per Pipeline Analyst run (Claude Opus, occasional/high-level —
- * see src/lib/analyst/pipeline-analyst.ts). Triggered by new signal (a
- * batch of new applications, or a new interview), not a fixed schedule —
- * see checkAnalystEligibility() in src/lib/analyst/eligibility.ts. Never
- * auto-applies its own recommendations; a human decides what to act on.
- */
-/**
  * Cached research about an employer, shared across every job at that company.
  *
  * The Resume Tailoring Agent otherwise sees only the job description and a
@@ -445,6 +438,13 @@ export const companyProfiles = pgTable("company_profiles", {
 
 export type CompanyProfile = typeof companyProfiles.$inferSelect;
 
+/**
+ * One row per Pipeline Analyst run (Claude Opus, occasional/high-level —
+ * see src/lib/analyst/pipeline-analyst.ts). Triggered by new signal (a
+ * batch of new applications, or a new interview), not a fixed schedule —
+ * see checkAnalystEligibility() in src/lib/analyst/eligibility.ts. Never
+ * auto-applies its own recommendations; a human decides what to act on.
+ */
 export const analystReports = pgTable("analyst_reports", {
   id: uuid("id").defaultRandom().primaryKey(),
   triggerReason: text("trigger_reason").notNull(),
