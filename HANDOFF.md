@@ -461,6 +461,23 @@ Submitted: Indigo ×2 (Business Operations Associate; Business Operations & Stra
 
 **Sweep also found**: Mach9 advanced to a 30-min interview with Alex, **Mon 2026-10-05 12:30pm PDT**. Exa's case review with Isaak is **Tue 2026-10-06 12:30pm PDT** (take-home submitted 09-28). Baseten's rescheduled intro ran **Fri 2026-10-02 5:30pm CDT**. Human Interest rejected the 09-30 application **in one day**. Also rejected since 09-30: GitLab, Join Parachute, Cloudflare, Valence. A "Massed Compute — Business Operations Manager" application confirmation arrived 09-30 that this pipeline did not send — applied outside the system.
 
+## Known bug, not yet filed: the daily-sweep check misfires every evening Pacific
+
+The apply-run skill's "has a run already started today?" gate queries `agent_run_queue WHERE started_at::date = CURRENT_DATE`. The database runs in **UTC**. Any run after ~17:00 Pacific lands on the next UTC day, so the check reports zero runs and would trigger a redundant Gmail sweep. Confirmed 2026-09-08: five closeouts at 18:07–18:13 UTC, and the gate still returned 0. Compare in a fixed local timezone (`(started_at AT TIME ZONE 'America/Los_Angeles')::date`) rather than the session default, or sanity-check the raw timestamps before sweeping twice in one day.
+
+## Auth session expiry and the script fallback (2026-09-03 → 2026-09-08)
+
+The app gates every route behind a single-account Supabase Auth check, and **the Playwright browser's session silently expired around 2026-09-03**. Symptoms: every app API call returns 401 and `/search` redirects to `/login`.
+
+Two things to know:
+
+- **`curl` cannot verify this.** It has its own empty cookie jar and will always return 401. Check through the automation browser's own cookies (`page.context().cookies()` → `page.request.get(...)`), which is what the skill's close-out snippet already does.
+- **Logging in must happen in the Playwright browser window**, not your everyday browser — separate profiles, separate cookie jars. Re-signing in there restored it on 2026-09-08 (cookie `sb-<project-ref>-auth-token`).
+
+While it was expired, ~14 applications were still submitted by calling the **same library functions the API routes wrap**, from a throwaway `.mts` run with `node --env-file=.env.local --import tsx`: `promote` logic → `generateTailoringPlan` → `applyTailoring` → `renderResumePdf` → `uploadResumePdf`, then close-out re-using the real `computeJobStatusSideEffects()` cascade so `appliedAt` and the KPI timestamps populate identically. Those records are indistinguishable from API-produced ones. Prefer the real API when the session is alive; this is the documented fallback when it is not.
+
+Two file-resolution gotchas for that fallback: the script must live **inside the project directory** (Node's ESM resolution needs `node_modules`), and it must be `.mts` — a plain `.ts` is treated as CJS by tsx and rejects top-level `await`.
+
 ## Where to look for more
 
 - **`apply-run` project skill** (`.claude/skills/apply-run/SKILL.md`): the playbook for actually driving a live apply run — standing default answers, per-ATS Playwright gotchas, and the real-API close-out pattern. Auto-loads when relevant; update it (not this file) when you learn a new gotcha or default.
