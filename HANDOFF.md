@@ -404,6 +404,41 @@ Submitted: Indigo ×2 (Business Operations Associate; Business Operations & Stra
 
 **Sweep also found**: Mach9 advanced to a 30-min interview with Alex, **Mon 2026-10-05 12:30pm PDT**. Exa's case review with Isaak is **Tue 2026-10-06 12:30pm PDT** (take-home submitted 09-28). Baseten's rescheduled intro ran **Fri 2026-10-02 5:30pm CDT**. Human Interest rejected the 09-30 application **in one day**. Also rejected since 09-30: GitLab, Join Parachute, Cloudflare, Valence. A "Massed Compute — Business Operations Manager" application confirmation arrived 09-30 that this pipeline did not send — applied outside the system.
 
+## Analyst run 2026-10-09: neither score predicts an interview
+
+Fourth report (Opus 4.8, 432 jobs, $0.37, triggered by `application_batch` — 10 new
+applications since 2026-09-30). The 2026-07-24 pattern not only held, it widened: the
+run now says outright that **resume coverage score does not predict interviews either**.
+9 of 11 interviews came from coverage ≤48 (Redwood 16, WindBorne 23, Anduril Associate
+25, Base Power 48); the high-coverage applications — Vanta 70, Nooks 60, Factory 60 —
+converted at zero. Together with the match-score finding from the previous two runs,
+**neither of the tool's two numbers is predictive**, so neither should be used to
+prioritize or skip a job, and the tailoring agent should not optimize toward coverage
+until it is recalibrated. Still n=11; the report caveats this itself.
+
+The rest, in rough priority order:
+
+- **Interviews skew to physical-ops / nominally out-of-scope roles** (Fluidstack Austin
+  match 58, Redwood out-of-metro, WindBorne match 22 and below the salary floor, Base
+  Power match 15) — thinner applicant competition. Worth targeting deliberately.
+- **Zero visible interviews from the match ≥80 cohort** (OpenAI, Anthropic, Vercel,
+  Nscale, Rippling, Brex). Likely a seniority mismatch: dozens of rationales flag ~3-4
+  years against 6-10 required (Snowflake, Plaid, Databricks, Waymo, Reflection AI, Crusoe
+  Sr Mgr). Note this collides with the profile's self-reported 8 years.
+- **One Google discovery row cost $0.749** — ~1.5% of the $50.45 lifetime spend, against
+  a typical $0.02-0.06/job. Worth a per-job spend cap so one retry loop can't dominate.
+- **Board-poll suggestions pay search cost then die** on `posting_removed` /
+  `out_of_scope_action` / `eligibility_gate_unresolved` without ever being applied.
+- **Company overrepresentation**: Anduril ~20+ rows, plus Samsara, Anthropic, DoorDash,
+  Verkada — mostly adjacent fits that get blocked. A per-company suggestion cap would help.
+- Apply latency is already fine (mostly 0.0-0.6 days); speed is not the bottleneck.
+
+**The report does not know about the Base Power offer.** It still counts Base Power as
+one of 11 interviews, because `jobs.status` has no `offer` value. Deliberate — the
+candidate wants offer tracking kept outside the tool — but it means the furthest-converting
+role in the pipeline is scored like any other interview, and any future analyst run will
+make the same mistake. Read its outcome claims with that in mind rather than "fixing" it.
+
 ## The repo no longer carries one candidate's details into a fork (2026-10-09)
 
 Three things used to be manual de-personalisation steps for anyone forking this, and
