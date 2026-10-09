@@ -1,3 +1,4 @@
+import type { RoleScope } from "@/lib/search/role-scope";
 import {
   pgTable,
   uuid,
@@ -143,6 +144,19 @@ export type SearchCriteria = {
   locations: string[];
   salaryFloor?: number;
   industries: string[];
+  /**
+   * What counts as this candidate's function — the vocabulary behind the
+   * title classifier, as data rather than code. Accepts a built-in name
+   * ("ops", "product"), a full scope object, or a partial one with
+   * `extends` to override a preset.
+   *
+   * Omit it and the original operations scope applies, which is what keeps
+   * existing instances unchanged. A fork in a different role family MUST set
+   * it: without it, `classifyRoleFamily("Product Manager")` returns null and
+   * the free job-board channel rejects that fork's own target roles. See
+   * src/lib/search/role-scope.ts.
+   */
+  roleScope?: string | (Partial<RoleScope> & { extends?: string });
 };
 
 /** Singleton row: candidate profile, work-auth defaults, and search criteria. */
