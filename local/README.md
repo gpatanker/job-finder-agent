@@ -32,36 +32,47 @@ what's there.
   any blank to have the Apply Run Brief tell the automation to select
   "decline to answer" for it instead).
 
-  **If you are not in operations, set `searchCriteria.roleScope`.** It is the
-  one field that decides what the title classifier counts as "your function",
-  and it is the difference between the free job-board channel finding your
-  roles and rejecting all of them. Omit it and you inherit the Business /
-  Strategy Operations scope this project was first built for — under which
-  `classifyRoleFamily("Product Manager")` returns null.
+  **Set `searchCriteria.targetStatement` and then generate your `roleScope`.**
+  `roleScope` is the word lists the job-title filter uses to decide which of the
+  thousands of open postings on ~165 boards are even your function. It is not
+  optional and there is no safe default: the built-in fallback is one specific
+  candidate's *operations* scope, in which `"engineer"` is a disqualifying term,
+  so a software engineer who skipped this would get zero results and no
+  explanation. Search refuses to run until it is set.
 
-  Three ways to set it, cheapest first:
+  You don't write it by hand. Describe what you want, then generate it:
 
   ```jsonc
-  // 1. Take a built-in preset as-is. Built-ins: "ops", "product".
-  "roleScope": "product"
-
-  // 2. Start from a preset and override a few lists.
-  "roleScope": { "extends": "product", "disqualifyingDomains": ["marketing", "design"] }
-
-  // 3. Spell one out in full — see src/lib/search/role-scope.ts for every
-  //    field and the reasoning behind each.
+  "searchCriteria": {
+    "roleFamilies": ["Senior Software Engineer", "Backend Engineer", "Staff Engineer"],
+    "targetStatement": "Backend software engineer, 6 years. Senior or Staff IC roles at
+                        infrastructure or developer-tools companies. Not management,
+                        not frontend, not ML research, not hardware."
+  }
   ```
 
-  Keys beginning with `_` are ignored, so you can leave notes to yourself in
-  the JSON. The field that catches people out is **`bareHeadIsCore`**: it must
-  be `false` for operations, where a bare "Operations Manager" is noise because
-  every profession has one, and `true` for product, where "Product Manager" is
-  precisely the target rather than a title needing a qualifier.
+  ```bash
+  npm run db:seed-profile          # load the above
+  npm run db:derive-role-scope     # generate a scope and PRINT it — saves nothing
+  npm run db:derive-role-scope -- --write   # save it once you've read it
+  ```
 
-  `rubricRules` is the candidate-specific half of the LLM's scoring prompt —
-  your in-scope families, your hard exclusions each with a reason, and your
-  seniority ceiling. The presets ship it empty on purpose: inheriting someone
-  else's exclusions is worse than writing your own.
+  The dry run shows the generated word lists plus a table of how they classify
+  your stated targets and some deliberate near-misses, so you can see the gate
+  working before you trust it. `roleFamilies` and `targetStatement` must
+  describe the **same** job — the generated scope is checked against those
+  titles and rejected if it doesn't accept them, which is what catches an
+  inverted or over-broad exclusion list.
+
+  Hand-editing is expected and supported: paste the JSON into `roleScope` and
+  change it. Keys beginning with `_` are ignored so you can leave yourself
+  notes. `"roleScope": "ops"` or `"product"` takes a built-in preset as-is, and
+  `{ "extends": "product", ... }` starts from one and overrides a few lists.
+
+  The field that catches people out is **`bareHeadIsCore`**: `false` where the
+  head noun alone is noise ("Operations Manager" — every profession has one),
+  `true` where it is the job ("Software Engineer", "Product Manager").
+
 - **resume.seed.json** — your base resume as structured data, not a static
   file. Each bullet has a stable `id`, `keywords`, and a `synonyms` map (a
   small set of pre-approved phrasing swaps for that bullet only). The Resume

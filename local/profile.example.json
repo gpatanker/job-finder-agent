@@ -46,48 +46,10 @@
       "Enterprise software",
       "Fintech"
     ],
+    "targetStatement": "Describe in your own words what you do, what level you want, and what you explicitly DON'T want. This plus roleFamilies is the input to `npm run db:derive-role-scope`, which generates searchCriteria.roleScope — the word lists the job-title filter uses. Example: \"Backend software engineer, 6 years. Senior or Staff IC roles at infrastructure companies. Not management, not frontend, not ML research.\" roleFamilies above must describe the SAME job.",
     "roleScope": {
-      "extends": "ops",
-      "_comment": "REQUIRED IF YOU ARE NOT IN OPERATIONS. Picks what counts as your function for the title classifier. Built-ins: 'ops' (Business/Strategy Operations) and 'product' (Product Management). Set the string alone (\"roleScope\": \"product\") to take a preset as-is, or use this object form with 'extends' plus any lists you want to override. Omit roleScope entirely and you inherit the operations scope — which will reject your own target roles if you are not in ops. See src/lib/search/role-scope.ts for every field and why each exists.",
-      "headTerms": [
-        "operations",
-        "operation",
-        "ops"
-      ],
-      "bareHeadIsCore": false,
-      "coreDomains": [
-        "business",
-        "revenue",
-        "commercial"
-      ],
-      "adjacentDomains": [
-        "sales",
-        "partner",
-        "technical",
-        "product"
-      ],
-      "disqualifyingDomains": [
-        "recruiting",
-        "people",
-        "finance",
-        "marketing",
-        "clinical",
-        "engineer"
-      ],
-      "overSeniorTerms": [
-        "director",
-        "head of",
-        "vice president",
-        "vp",
-        "principal"
-      ],
-      "underLeveledTerms": [
-        "intern",
-        "apprentice",
-        "technician",
-        "operator"
-      ],
-      "rubricRules": "- Higher for: titles closely matching <your role family>. Lower for: <adjacent families you do not want>.\n- <FAMILY> is a hard exclusion — score below 40 — even when the title also names <a word you do want>. Give the real reason, and real example titles you rejected.\n\nSENIORITY CEILING — your reach tops out at <level>. Do NOT include <levels above it>, even if everything else matches. <Levels> are still fair game."
+      "_generated_by": "npm run db:derive-role-scope -- --write",
+      "_note": "Do not hand-write this from scratch. Generate it from targetStatement, read what it produced, then edit if needed. Search refuses to run until this is set — there is no safe default, because the built-in fallback is another candidate's operations scope in which \"engineer\" is a disqualifying term. Shortcut: replace this whole object with the string \"ops\" or \"product\" to use a built-in preset as-is."
     }
   }
 }

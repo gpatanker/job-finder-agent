@@ -103,8 +103,18 @@ This repo is public and generic by design — no personal data lives in source c
    # edit those three files with your real information, then:
    npm run db:seed-profile
    ```
-7. **Create your login account** in Supabase Auth (Dashboard → Authentication → Users → Add user), matching the email you'll sign in with.
-8. **Run it:**
+7. **Generate your role scope** — the word lists that decide which job titles
+   count as *your* function. Describe what you want in
+   `searchCriteria.targetStatement`, then:
+   ```bash
+   npm run db:derive-role-scope            # prints a generated scope, saves nothing
+   npm run db:derive-role-scope -- --write # save it after reading it
+   ```
+   Search refuses to run until this is set. There's no safe default — the
+   fallback is one specific candidate's operations scope, in which `"engineer"`
+   is a disqualifying term, so skipping this returns zero results silently.
+8. **Create your login account** in Supabase Auth (Dashboard → Authentication → Users → Add user), matching the email you'll sign in with.
+9. **Run it:**
    ```bash
    npm run dev
    ```
@@ -139,7 +149,7 @@ Quick reference:
 ```bash
 npx tsc --noEmit       # typecheck
 npm run build          # production build
-npm run test           # Vitest unit tests (295 tests / 31 files, no live services needed)
+npm run test           # Vitest unit tests (333 tests / 33 files, no live services needed)
 npm run test:e2e       # Playwright E2E against a real running app (needs credentials)
 ```
 

@@ -320,3 +320,30 @@ export function resolveRoleScope(
   );
   return { ...base, ...overrides };
 }
+
+/**
+ * Like resolveRoleScope, but refuses to invent a scope when none is set.
+ *
+ * Search must use this. Falling back to a default here was actively harmful:
+ * the default is one specific candidate's operations scope, in which
+ * "engineer" is a DISQUALIFYING term — so a software engineer who seeded a
+ * profile without a scope got zero results from the board-poll channel and no
+ * indication why. Failing loudly at the point of use is strictly better than a
+ * silent wrong answer, because the symptom (an empty search) looks nothing
+ * like the cause.
+ */
+export function requireRoleScope(
+  configured?: string | (Partial<RoleScope> & { extends?: string }) | null
+): { ok: true; scope: RoleScope } | { ok: false; error: string } {
+  if (!configured) {
+    return {
+      ok: false,
+      error:
+        "No searchCriteria.roleScope is set on your profile, so there is no definition of which job titles count as your function. " +
+        "Describe what you're looking for in searchCriteria.targetStatement and/or roleFamilies, then run `npm run db:derive-role-scope` " +
+        "to generate one (review what it writes). Refusing rather than defaulting on purpose: the built-in default is another " +
+        'candidate\'s operations scope, in which "engineer" is a disqualifying term — inheriting it would silently return zero results.',
+    };
+  }
+  return { ok: true, scope: resolveRoleScope(configured) };
+}

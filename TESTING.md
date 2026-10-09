@@ -7,11 +7,11 @@ This documents what's been verified, how, and the exact commands to reproduce it
 ```bash
 npx tsc --noEmit                    # typecheck — clean
 npm run build                       # production build — clean, all routes listed
-npm run test                        # Vitest: 295 tests, 31 files — all passing
+npm run test                        # Vitest: 333 tests, 33 files — all passing
 npm run test:e2e                    # Playwright E2E full-flow test (needs credentials)
 ```
 
-## Unit tests (Vitest, 295 tests / 31 files, no live services required)
+## Unit tests (Vitest, 333 tests / 33 files, no live services required)
 
 | Area | File | What it covers |
 |---|---|---|
@@ -32,6 +32,8 @@ npm run test:e2e                    # Playwright E2E full-flow test (needs crede
 | Query rotation | `src/lib/search/perplexity-discover.test.ts` | Whole-slice rotation (consecutive steps share no phrases), fresh and widen passes drawing disjoint slices within a run, and `rotationSeed` pinning the step for determinism |
 | Role-family scope | `src/lib/search/known-company-boards.test.ts` | The GTM/revenue-motion exclusion and its Business-Operations rescue clause, asserted against the real title corpus — including that "Sales Operations" stays in scope while "Revenue Operations" does not |
 | Exa channel | `src/lib/search/exa-discover.test.ts` | Query parity with the Perplexity builder (the A/B's core assumption), the ATS domain filter sent as `includeDomains`, `excludeDomains` sent only for the opted-in tuned arm, date-format conversion (MM/DD/YYYY → ISO 8601), actual `costDollars` preferred over the modelled rate card, citation dedupe across queries, and partial results plus a warning when some queries fail or the key is unset |
+| **Role scope** | `src/lib/search/role-scope.test.ts` | That the title filter is retargetable by data: the ops corpus classifies unchanged, `classifyRoleFamily("Product Manager")` flips from null to core purely by swapping scope, the `bareHeadIsCore` distinction (bare head noun is noise for ops and the target for product), the opt-in excluded-family carve-out, the seniority split on "principal" (executive in ops, senior IC in product), regex-metacharacter escaping in scope terms, `_`-prefixed comment-key stripping, and null overrides falling back to the preset rather than blanking a list |
+| **Scope derivation guard** | `src/lib/search/role-scope-agent.test.ts` | What a generated scope must satisfy before it's accepted — and most importantly the **self-check**: a scope that rejects every role family the candidate named is wrong by construction, however reasonable its word lists look. Also the contradiction guard (a term in both `headTerms` and `disqualifyingDomains` rejects everything — the exact failure that made a software engineer's search return nothing), empty `headTerms`/`rubricRules`, `rescuePhrases` with nothing to rescue from, and the warn-not-fail path when only *some* stated families are rejected since one may be aspirational |
 | Employer research | `src/lib/company/company-context.test.ts` | Cache-key normalization (punctuation/case collapsed so one employer is cached once; a nameless company yields an empty key callers treat as a no-op) and `formatCompanyContext` rendering — empty string when there is no profile so the prompt is unchanged, the signals line omitted when research found none, and the instruction not to claim anything the bullets don't support |
 
 ### Known coverage gaps
