@@ -40,7 +40,11 @@ export async function renderResumePdf(
       right: PAGE_MARGIN_X,
     },
     info: {
-      Author: meta.author ?? "Gaurav Patanker Resume Generator",
+      // Derived from the resume being rendered, never a hardcoded name. This
+      // metadata is readable by any ATS or recruiter who opens the PDF, so a
+      // hardcoded default meant every fork shipped resumes carrying the
+      // original author's name in a field nobody thinks to check.
+      Author: meta.author ?? resume.name,
       Title: meta.title ?? `${resume.name} — Resume`,
     },
     // @types/pdfkit doesn't model `font: false` (skip default font load),

@@ -56,3 +56,9 @@ next-env.d.ts
 # applications) — a personal dev-machine convenience, not part of the app
 .mcp.json
 .playwright-mcp/
+
+# Standing application answers, GENERATED from the candidate profile by
+# `npm run db:generate-apply-defaults`. Personal data — the apply-run skill
+# reads it, but it must never be committed, or a fork inherits someone else's
+# answers and submits real applications as them.
+.claude/skills/apply-run/standing-answers.md

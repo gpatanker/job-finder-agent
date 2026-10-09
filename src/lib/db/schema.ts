@@ -165,6 +165,38 @@ export type SearchCriteria = {
   targetStatement?: string;
 };
 
+/**
+ * Standing answers to recurring application questions that aren't already
+ * first-class profile columns.
+ *
+ * These used to live as hand-written prose in `.claude/skills/apply-run/SKILL.md`,
+ * which is a tracked file — so every fork inherited the original candidate's
+ * GitHub URL, visa status, demographics and resume filename, and any forker who
+ * skipped the manual rewrite sent applications answering as him. They're data
+ * now, and the skill file reads a generated, gitignored copy instead.
+ *
+ * Every field is optional. An unset field is rendered as "NOT SET — ask the
+ * candidate" rather than silently inheriting a default, because a wrong answer
+ * to one of these is submitted to a real employer under someone's name.
+ */
+export type ApplyDefaults = {
+  githubUrl?: string;
+  /** Free-text answer to "current visa status" fields, e.g. "U.S. Citizen". */
+  visaStatus?: string;
+  securityClearanceEligible?: boolean;
+  /** For optional diversity-survey age buckets, e.g. "Under 30". */
+  ageBracket?: string;
+  /** Which office to pick when a form offers a choice. */
+  officePreference?: string;
+  /** How to answer salary questions, free-text and numeric. */
+  salaryAnswerStyle?: string;
+  /** Preferred length/tone for essay answers. */
+  essayStyle?: string;
+  gpa?: string;
+  /** Anything else that recurs on forms and has a settled answer. */
+  extraNotes?: string[];
+};
+
 /** Singleton row: candidate profile, work-auth defaults, and search criteria. */
 export const candidateProfile = pgTable("candidate_profile", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -214,6 +246,8 @@ export const candidateProfile = pgTable("candidate_profile", {
   aiPolicyAgreement: text("ai_policy_agreement"),
   education: jsonb("education").$type<EducationEntry[]>().notNull().default([]),
   searchCriteria: jsonb("search_criteria").$type<SearchCriteria>(),
+  /** See ApplyDefaults — standing answers the apply-run skill renders. */
+  applyDefaults: jsonb("apply_defaults").$type<ApplyDefaults>(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

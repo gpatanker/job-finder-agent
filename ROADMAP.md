@@ -6,7 +6,7 @@ This is a single-user personal tool by design — the near-term goal was never m
 
 - **Config-driven, not hardcoded**: profile/resume/story-bank data lives in the database (seeded from local files), not baked into application code. A multi-user version doesn't need to rearchitect this — it needs to key it by user.
 - **RLS is already enabled on every table.** Today it has zero policies (deny-all except the server-side service-role connection). Multi-user would mean adding real policies scoped to `auth.uid()` instead of removing RLS.
-- **The three agents (Resume Tailoring, Answer Generation, Job Search) are already parameterized by the data passed in** — none of them hardcode "Gaurav's" data; they operate on whatever `ResumeData`/`CandidateProfile`/story bank rows are passed to them.
+- **The three agents (Resume Tailoring, Answer Generation, Job Search) are already parameterized by the data passed in** — none of them hardcode one candidate's data; they operate on whatever `ResumeData`/`CandidateProfile`/story bank rows are passed to them.
 
 ## What would need to change
 

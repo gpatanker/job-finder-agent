@@ -79,6 +79,18 @@ describe("renderResumePdf", () => {
     await parser.destroy();
   });
 
+  it(
+    "regression: PDF Author metadata comes from the resume, never a hardcoded name. A hardcoded " +
+      "default meant every fork shipped resumes carrying the original author's name in a field an " +
+      "ATS or recruiter can read and nobody thinks to check",
+    async () => {
+      const pdf = await renderResumePdf(fixtureResume); // no meta.author passed
+      const info = await new PDFParse({ data: pdf }).getInfo();
+      expect(info.info.Author).toBe(fixtureResume.name);
+      expect(info.info.Author).not.toMatch(/gaurav|patanker/i);
+    }
+  );
+
   it("never renders bullet text that isn't in the source data (no fabrication)", async () => {
     const buffer = await renderResumePdf(fixtureResume);
     const parser = new PDFParse({ data: buffer });

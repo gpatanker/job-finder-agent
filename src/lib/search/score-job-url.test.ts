@@ -26,6 +26,7 @@ const profile = {
   aiPolicyAgreement: null,
   education: [],
   searchCriteria: null,
+  applyDefaults: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 } satisfies CandidateProfile;

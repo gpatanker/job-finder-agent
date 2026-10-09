@@ -17,6 +17,15 @@ To seed your own candidate profile, resume, and story bank:
    ```
    npm run db:seed-profile
    ```
+4. Generate the two things that are derived from the profile rather than
+   written by hand — your role scope (what counts as your kind of job) and
+   your standing application answers:
+   ```
+   npm run db:derive-role-scope          # prints a scope; saves nothing
+   npm run db:derive-role-scope -- --write
+   npm run db:generate-apply-defaults    # writes the gitignored standing-answers.md
+   ```
+   Re-run both whenever the profile changes.
 
 Re-running the seed script is safe — `candidate_profile` and `resume_profile`
 are singleton tables that get replaced wholesale, and `story_bank_entries` are
@@ -77,6 +86,20 @@ what's there.
   lists which filter what comes back — so if they name the wrong function you
   pay for searches you don't want. A product candidate measured 0 of 8 queries
   mentioning "product" before this was per-scope.
+
+  **`applyDefaults` holds the standing answers that recur on every
+  application** — visa status, which office you'd pick, how to answer a salary
+  question, essay length, GPA if a form demands one. `npm run
+  db:generate-apply-defaults` renders them into
+  `.claude/skills/apply-run/standing-answers.md`, which is gitignored and which
+  the `apply-run` skill reads instead of carrying anyone's personal answers in
+  tracked prose. Every field in the template ships **blank on purpose**: a
+  blank renders as `NOT SET — ask the candidate`, so the apply run stops and
+  asks, while a pre-filled example phrase would be typed into a real
+  employer's form by anyone who skipped the field. Guidance for each field is
+  in a `_`-prefixed sibling key (`_visaStatus` next to `visaStatus`), which the
+  reader ignores. Leave anything you're unsure about blank — being asked once
+  per run is cheaper than one wrong answer on a live application.
 
 - **resume.seed.json** — your base resume as structured data, not a static
   file. Each bullet has a stable `id`, `keywords`, and a `synonyms` map (a

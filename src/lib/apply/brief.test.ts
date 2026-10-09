@@ -67,6 +67,7 @@ const profile = {
   aiPolicyAgreement: null,
   education: [{ school: "State University", degree: "B.S." }],
   searchCriteria: null,
+  applyDefaults: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 } satisfies CandidateProfile;

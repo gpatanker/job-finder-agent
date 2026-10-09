@@ -80,6 +80,8 @@ flowchart TD
 
 This repo is public and generic by design — no personal data lives in source control, ever. Your resume, story bank, and profile are seeded into the database from a gitignored `local/*.seed.json` file (see [`local/README.md`](local/README.md)); only generic `*.example.json` templates are committed. Row Level Security is enabled on every table with zero policies, so only the server-side service-role connection can read/write — the public `anon` key (necessarily shipped in the browser bundle for Supabase Auth) gets nothing.
 
+Three things that are personal but *look* like code are generated from your profile rather than written into tracked files, because a fork that inherited them would send someone else's details out on real applications: the standing answers the apply-run skill uses (`npm run db:generate-apply-defaults` → a gitignored `standing-answers.md`), the role scope that decides which job titles are your function (`npm run db:derive-role-scope`), and the `Author` metadata on generated resume PDFs (read from the resume being rendered). Setting up a fork for someone else is documented end to end in [`FORKING.md`](FORKING.md).
+
 ## Getting your own instance running
 
 1. **Create a Supabase project** (Postgres + Storage + Auth). See [`DEPLOYMENT.md`](DEPLOYMENT.md) for exact steps.
@@ -113,11 +115,20 @@ This repo is public and generic by design — no personal data lives in source c
    Search refuses to run until this is set. There's no safe default — the
    fallback is one specific candidate's operations scope, in which `"engineer"`
    is a disqualifying term, so skipping this returns zero results silently.
-8. **Create your login account** in Supabase Auth (Dashboard → Authentication → Users → Add user), matching the email you'll sign in with.
-9. **Run it:**
+8. **Generate your standing application answers:**
    ```bash
-   npm run dev
+   npm run db:generate-apply-defaults
    ```
+   This renders `applyDefaults` from your profile into the gitignored
+   `.claude/skills/apply-run/standing-answers.md`, which the `apply-run` skill
+   reads so no personal answers live in tracked prose. It prints any field with
+   no answer on file; those render as "NOT SET — ask the candidate", so an
+   apply run pauses for them rather than guessing.
+9. **Create your login account** in Supabase Auth (Dashboard → Authentication → Users → Add user), matching the email you'll sign in with.
+10. **Run it:**
+    ```bash
+    npm run dev
+    ```
 
 ## Environment variables
 
@@ -137,7 +148,7 @@ This repo is public and generic by design — no personal data lives in source c
 
 - Schema lives in `src/lib/db/schema.ts`; migrations are generated with `npm run db:generate` and applied with `npm run db:migrate`.
 - Every table has Row Level Security enabled with **no policies** — only the service-role connection (server-side only) can touch them.
-- `candidate_profile` and `resume_profile` are singleton tables (one row) — re-running `npm run db:seed-profile` replaces them wholesale, safe to re-run after editing your local seed files.
+- `candidate_profile` and `resume_profile` are singleton tables (one row) — re-running `npm run db:seed-profile` replaces them wholesale, safe to re-run after editing your local seed files. That includes `searchCriteria.roleScope` and `applyDefaults`, so keep both in `local/profile.seed.json` rather than only in the database, and re-run `npm run db:generate-apply-defaults` afterwards.
 - `story_bank_entries` are upserted by `slug` — safe to re-run after edits.
 - `jobs.is_sample` gates demo data out of every list query by default; `SEED_DEMO_DATA=1` is required to seed demo rows, and `npm run db:cleanup-demo` removes them (cascades to dependent `application_questions`/`agent_run_queue` rows via FK).
 
@@ -149,7 +160,7 @@ Quick reference:
 ```bash
 npx tsc --noEmit       # typecheck
 npm run build          # production build
-npm run test           # Vitest unit tests (336 tests / 33 files, no live services needed)
+npm run test           # Vitest unit tests (337 tests / 33 files, no live services needed)
 npm run test:e2e       # Playwright E2E against a real running app (needs credentials)
 ```
 
@@ -167,6 +178,10 @@ npm run test:e2e       # Playwright E2E against a real running app (needs creden
 ## Deployment
 
 See [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+## Setting this up for someone else
+
+See [`FORKING.md`](FORKING.md) — the discovery interview to run, what each answer maps to, and what is generated rather than hand-edited.
 
 ## Roadmap
 

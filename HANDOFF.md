@@ -14,71 +14,11 @@ Core loop: the **Job Search Agent** (Perplexity Search API for discovery + one b
 
 **The app itself never submits an application.** Submission always happens out-of-band, via Playwright browser automation driven by a Claude Code session (this is "the Computer" referenced in the UI/briefs).
 
-## Forking this for a new candidate (not Gaurav)
+## Forking this for yourself
 
-If you're an LLM reading this because someone other than Gaurav Patanker wants to run their own instance, this section is your playbook — read it now, before the rest of the file. Everything below this section (architecture notes, search-pipeline bug history, Gaurav's own pipeline stats and role-family rules) is his instance's operational history, not instructions to follow for a new person; come back to it later for context, not as a checklist.
-
-**The short version**: this is a single-user tool by design (see [ROADMAP.md](ROADMAP.md)) — there's no "add a second user to Gaurav's account." The new person needs their own fork, their own Supabase project, their own API keys, and their own candidate data. Nothing about the *code* needs to change; everything about the *data and defaults* does.
-
-**That last sentence used to be false for anyone outside operations, and is now true.** The title classifier's vocabulary — the required head noun, the domain tiers, the exclusions, the seniority band, and the candidate-specific half of the scoring rubric — was hardcoded to Business/Strategy Operations, so `classifyRoleFamily("Product Manager")` returned null and a product candidate's own target roles were rejected by the free job-board channel before scoring ran. That vocabulary now lives in `searchCriteria.roleScope`, and it is **generated from the candidate's own words** rather than hand-written: put what they're looking for in `searchCriteria.targetStatement` and run `npm run db:derive-role-scope`. Search refuses to run until a scope exists — there is no safe default, since the built-in fallback is this instance's operations scope in which "engineer" is a disqualifying term. Presets (`ops`, `product`) remain as shortcuts and as the output shape. See `src/lib/search/role-scope.ts`, `role-scope-agent.ts`, and `local/README.md`.
-
-### Three layers that need personalizing
-
-1. **Infra & accounts** — a new Supabase project, Anthropic API key, Perplexity API key, `.env.local`, and a Supabase Auth login user. Purely mechanical, already fully documented in [README.md](README.md)'s "Getting your own instance running" and [DEPLOYMENT.md](DEPLOYMENT.md) — follow those verbatim, nothing candidate-specific in that part.
-2. **Structured candidate data**, seeded into the database from gitignored `local/*.seed.json` files — profile, resume, story bank, question bank. This is what makes the app work for *them* specifically (what jobs it searches for, what resume it tailors, what answers it drafts). This is the bulk of what this section covers.
-3. **Standing default answers baked into the `apply-run` skill** (`.claude/skills/apply-run/SKILL.md`). Unlike `local/`, this file is **not** gitignored, and as of this writing it's full of Gaurav-specific facts: his name, email, GitHub URL, exact resume-filename convention, demographic defaults, salary-answer style, and role-family scope decisions. This is the file a Claude Code session actually reads before driving a live apply run — skip rewriting it and the new candidate's applications will go out with **Gaurav's** answers to recurring questions. Don't treat this as optional just because it isn't a seed file.
-
-### Layer 2: run a discovery interview
-
-Don't dump every question on the person at once — work through it in a few conversational passes, draft the file, let them correct it. Everything below maps to a real field the app uses (see `local/README.md` for exact shapes, `local/*.example.json` for templates) — this isn't small talk, every answer lands somewhere concrete.
-
-**Pass 1 — identity & work authorization** (→ `profile.seed.json` top-level fields)
-- Full legal name, email, phone, LinkedIn URL, current city/state/zip, current employer (if any)
-- "Are you authorized to work in [country] without needing sponsorship, now or in the future?" — this becomes the standing default answer to that exact question on every application, so get it precise (citizen vs. green-card holder vs. someone who *will* need sponsorship all answer this differently, and getting it wrong is a real eligibility-gate risk, not a cosmetic one)
-- Highest education level completed, plus full education history (school + degree, for the resume)
-- Total years of relevant experience, self-reported — note this may not literally match the tailored resume's span, since resumes typically only show relevant roles, not a full work history
-- Open to relocating? If a form offers a choice of office locations, which do they prefer?
-- Optional EEO/demographic self-ID: gender identity, race/ethnicity, sexual orientation, veteran status, disability status. Say explicitly these are legally optional on every application and fine to leave blank — don't press if they'd rather skip.
-
-**Pass 2 — what they're actually looking for** (→ `profile.seed.json.searchCriteria`)
-- Exact job-title / role-family phrases to search for — be specific ("Business Operations Manager" and "Strategy & Operations" are meaningfully different search targets than just "operations")
-- Any title-adjacent roles that are explicitly OUT of scope, and why. This matters more than it sounds — keyword matching alone over-includes. (Gaurav's own instance has a rule that pure Finance/Engineering/Marketing-titled roles don't count even though they share vocabulary, but Ops/Strategy-*flavored* versions of those functions do. The point isn't to copy his rule — it's to draw out the new candidate's own equivalent distinction.)
-- Target locations (cities, "Remote," or both), salary floor, target industries (and any industries to explicitly avoid)
-- **Then capture it as `searchCriteria.targetStatement` and GENERATE the scope** — don't hand-author word lists. Write their own description of the role, level, and explicit exclusions into `targetStatement`, make sure `roleFamilies` names the same job, then run `npm run db:derive-role-scope` (dry run — it prints a generated scope plus a table showing how it classifies their stated targets and some near-misses). Read it WITH them, hand-edit anything wrong, then `-- --write`. The generated scope is checked in code against their stated `roleFamilies` and refused if it rejects them, which catches an inverted or over-broad exclusion list before it costs a week of empty searches. Note search now REFUSES to run until a scope is set rather than defaulting — the old default was this instance's operations scope, in which "engineer" is a disqualifying term, so a software engineer inheriting it got zero results and no explanation.
-
-**Pass 3 — the resume, as structured data, not a file** (→ `resume.seed.json`)
-This app doesn't take a PDF or Word doc — the resume is structured JSON so the tailoring agent can reorder bullets and swap in pre-approved synonyms without ever inventing new content. Ask them to paste their current resume text, then:
-- Break each role into bullets, each with a stable `id`
-- For each bullet, propose `keywords` (the skill/domain it demonstrates — this is what coverage-scoring and tailoring actually match against job descriptions) and a small `synonyms` map (2-3 alternate phrasings for the key verb/phrase only, e.g. `"Reduced": ["Reduced", "Cut", "Shortened"]`) — draft these yourself from the bullet's content and have them approve/edit; don't ask them to hand-write raw JSON
-- Capture skills (grouped by category) and certifications the same way
-- See `local/resume.example.json` for the exact shape to produce
-
-**Pass 4 — story bank** (→ `story-bank.seed.json`)
-Ask for the material behind commonly-asked prompts: greatest achievement, hardest problem solved, a conflict or negotiation example, a leadership example, something not on the resume, why this field/industry, a failure and what they learned from it. Keep it specific and truthful — answer generation is grounded *strictly* in whatever's here, so a thin story bank produces thin generated answers. Each entry needs a `slug`, `title`, `tags`, and `content` — see `local/story-bank.example.json`.
-
-**Pass 5 — question bank (optional)** (→ `question-bank.seed.json`)
-If they already have polished, pre-written answers to recurring prompts ("why do you want to work here," "tell us about yourself"), capture those directly instead of letting them get regenerated from the story bank every time. Each entry needs a list of `question_variants` (paraphrases meaning the same thing) and one `answer`. Skip this pass entirely if they have nothing pre-written — seeding gracefully skips a missing file.
-
-### Layer 3: personalize the `apply-run` skill
-
-After the interview, rewrite `.claude/skills/apply-run/SKILL.md`'s "Standing default answers" section (and the resume-filename note under it) using what you just gathered — same structure, new facts. Concretely, replace:
-- Name, email, GitHub URL, and the resume-filename convention (currently hardcoded to `Gaurav_Patanker_Resume.pdf`)
-- Work authorization / sponsorship default, "how did you hear about us" default, relocation/office-preference default, and salary-expectation answer style
-- The demographic defaults (gender, race/ethnicity, veteran/disability status) — only fill these in if they gave you real answers in Pass 1; otherwise leave the skill saying "decline to answer" for these
-- The essay-answer style guidance (length/tone), if they express a preference — otherwise the existing "~2 short paragraphs" default is reasonable to keep as-is
-- Any role-family in/out-of-scope rule surfaced in Pass 2
-
-Leave the **per-ATS technical gotchas** alone (Greenhouse combobox behavior, Ashby toggle-button verification, the DOM-ref-staleness pattern, etc.) — those are platform behaviors, not candidate-specific, and apply to whoever is driving these forms.
-
-### What not to carry over
-
-- Don't copy any of Gaurav's actual answers, examples, or identifying details into the new candidate's files "as a starting point" — draft everything fresh from what they tell you.
-- Claude Code's memory system (`~/.claude/projects/.../memory/`) is scoped by project directory path, so a fresh clone in a new directory starts with no memory automatically — nothing to clean up there, unless someone is (don't) reusing Gaurav's existing clone/directory for the new person instead of cloning fresh.
-- `local/*.seed.json` files are already gitignored — never commit them. `.claude/skills/apply-run/SKILL.md` is **not** gitignored, so before pushing, double-check it no longer contains Gaurav's name/email/GitHub URL once rewritten.
-
-### Before the first real apply run
-
-Confirm: `.env.local` is filled in and `npm run dev` boots, `npm run db:seed-profile` ran clean, the Supabase Auth login works, and a read-through of the rewritten `apply-run` skill turns up zero remaining references to Gaurav. Then proceed exactly as the rest of this file and [ARCHITECTURE.md](ARCHITECTURE.md) describe — the pipeline mechanics don't change per candidate, only the data does.
+Moved to **[FORKING.md](FORKING.md)** — it is a shipped guide rather than part of this
+log, because this file is one candidate's operational history and a forker shouldn't have
+to read 480 lines of it to find the setup steps.
 
 ## Architecture quick-reference
 
@@ -107,7 +47,7 @@ Gaurav Patanker — Fremont, CA (94538). Background: Business Operations / Strat
 
 Full detailed background, story bank, and pre-written answers to common interview-style prompts live in the DB (`storyBankEntries`, `questionBankEntries`) — query them directly rather than re-deriving from memory if you need to draft an essay answer. As of this writing they cover: greatest achievement, why-this-company, technical background, hardest project, negotiation examples, "something not on your resume" (first-gen American, national cricket team), etc.
 
-**Standing default answers for recurring application questions and per-ATS Playwright gotchas (Greenhouse/Ashby/Rippling/embedded forms) live in the `apply-run` project skill** (`.claude/skills/apply-run/SKILL.md`) — it auto-loads whenever a session is about to drive a live apply run, rather than depending on this file being read first. Update the skill (not this file) when you learn a new gotcha or default.
+**Per-ATS Playwright gotchas (Greenhouse/Ashby/Rippling/embedded forms) live in the `apply-run` project skill** (`.claude/skills/apply-run/SKILL.md`) — it auto-loads whenever a session is about to drive a live apply run, rather than depending on this file being read first. Update the skill (not this file) when you learn a new gotcha. **The standing default answers are no longer in that file** — they are generated from the profile into `.claude/skills/apply-run/standing-answers.md` (gitignored) by `npm run db:generate-apply-defaults`. To change one, change `applyDefaults` in `local/profile.seed.json`, re-seed, and regenerate; editing the generated file is pointless because the next run overwrites it. See the 2026-10-09 section below.
 
 **Closing out a job now goes through the real API, not raw SQL** (changed 2026-07-22): `PATCH /api/agent-runs/{runId}` with `{status: "completed"}` or `{status: "blocked", resultSummary, blockReason, requiredManualInput?}`, driven through the authenticated browser session's own cookies via `browser_run_code_unsafe` — see the skill for the exact snippet. This single PATCH cascades `jobs.status`/`appliedAt`/`blockReason` automatically via `computeJobStatusSideEffects()`. It does **not** cascade `jobs.approvalStatus` — see the gotcha above, that still needs a periodic manual sweep.
 
@@ -463,6 +403,42 @@ Submitted: Indigo ×2 (Business Operations Associate; Business Operations & Stra
 **Rula's second req gates on 5+ years** and was answered No per the candidate's own 2026-09-21 threshold call — honest, but it will almost certainly auto-screen out. He may want to revisit that answer now that it has cost a second application.
 
 **Sweep also found**: Mach9 advanced to a 30-min interview with Alex, **Mon 2026-10-05 12:30pm PDT**. Exa's case review with Isaak is **Tue 2026-10-06 12:30pm PDT** (take-home submitted 09-28). Baseten's rescheduled intro ran **Fri 2026-10-02 5:30pm CDT**. Human Interest rejected the 09-30 application **in one day**. Also rejected since 09-30: GitLab, Join Parachute, Cloudflare, Valence. A "Massed Compute — Business Operations Manager" application confirmation arrived 09-30 that this pipeline did not send — applied outside the system.
+
+## The repo no longer carries one candidate's details into a fork (2026-10-09)
+
+Three things used to be manual de-personalisation steps for anyone forking this, and
+each one silently sent **the original author's** details out on real applications if
+you skipped it. Checklist items were the wrong fix; they are structural now.
+
+- **Standing answers were prose in a tracked file.** `.claude/skills/apply-run/SKILL.md`
+  held name, email, GitHub URL, visa status, demographics, the resume filename and the
+  age bracket, and it is committed. New `applyDefaults` jsonb column on
+  `candidate_profile` (migration `0013`) plus `npm run db:generate-apply-defaults`,
+  which renders `.claude/skills/apply-run/standing-answers.md` — gitignored. The tracked
+  skill keeps only the ATS behaviour, which is genuinely shared knowledge, and points at
+  the generated file. **A field with no answer on file renders as
+  `NOT SET — ask the candidate, do not guess`** rather than falling back to a default: a
+  wrong answer here is submitted to a real employer under someone's name, so silence is
+  the safer failure. `local/profile.example.json` therefore ships every `applyDefaults`
+  value *blank*, with the guidance in `_`-prefixed sibling keys the reader ignores.
+- **Resume PDF metadata had a hardcoded `Author`.** `render-pdf.ts` now uses
+  `meta.author ?? resume.name`. That field is readable by any ATS or recruiter who opens
+  the PDF and nobody thinks to check it. There is a regression test asserting the
+  rendered `Author` doesn't match the original author's name.
+- **`HANDOFF.md` was the fork guide and the personal log at once.** The fork guidance is
+  now [FORKING.md](FORKING.md); this file stayed the operational log.
+
+Two gaps found while doing it, both of which would have silently eaten data:
+`scripts/seed-local-profile.mjs` didn't persist `apply_defaults` at all (so a forker who
+filled in the template would have had it dropped on seed), and this instance's own
+`local/profile.seed.json` was missing both `searchCriteria` and `applyDefaults` while the
+database had them — the seed script deletes and re-inserts the singleton row, so the next
+`npm run db:seed-profile` would have wiped the role scope and every standing answer.
+Both synced back into the seed file; **whatever you set in the database, mirror it into
+`local/profile.seed.json` or the next re-seed deletes it.**
+
+Grep check for the whole change: the only remaining occurrence of the author's name
+under `src/` is the regression assertion that it must *not* appear.
 
 ## Known bug, not yet filed: the daily-sweep check misfires every evening Pacific
 
