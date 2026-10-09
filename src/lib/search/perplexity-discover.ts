@@ -1,4 +1,5 @@
 import type { CandidateProfile } from "@/lib/db/schema";
+import { OPS_ROLE_SCOPE, type RoleScope } from "./role-scope";
 import { estimatePerplexityCostUsd, logLlmUsage } from "@/lib/observability/llm-usage";
 
 const PERPLEXITY_SEARCH_URL = "https://api.perplexity.ai/search";
@@ -41,45 +42,11 @@ export const ATS_DOMAIN_FILTER = [
  * rotating which ones run each time (see rotateSlice below) means a rerun
  * doesn't just re-fetch the previous run's near-identical result set.
  */
-const ROLE_SYNONYM_POOL = [
-  // Core Business / Strategy Operations
-  "Business Operations Manager",
-  "Business Operations Lead",
-  "Business Operations Analyst",
-  "Business Operations Associate",
-  "Senior Business Operations Manager",
-  "Strategy and Operations Manager",
-  "Senior Strategy and Operations Manager",
-  "Strategy and Operations Lead",
-  "Strategy and Operations Associate",
-  "Operations Strategy Manager",
-  "Operations Manager",
-  "Senior Operations Manager",
-  "Operations Analyst",
-  "Business Strategy Manager",
-  // Infrastructure / capacity / data-centre — the family that has actually
-  // produced first-round interviews (Fluidstack, SpaceX, Base Power, WindBorne),
-  // and barely represented in the original pool.
-  "Infrastructure Operations Manager",
-  "Cloud Operations Manager",
-  "Data Center Operations Manager",
-  "Capacity Operations Manager",
-  "Capacity Planning Manager",
-  "Site Operations Manager",
-  "Field Operations Manager",
-  "Deployment Operations Manager",
-  "Technical Operations Manager",
-  "Technical Program Manager Operations",
-  // Commercial / vendor / product — in scope, distinct from GTM
-  "Commercial Operations Manager",
-  "Vendor Operations Manager",
-  "Procurement Operations Manager",
-  "Product Operations Manager",
-  "Program Operations Manager",
-  "Partner Operations Manager",
-  "Sales Operations Manager",
-  "Sales Strategy and Operations Manager",
-];
+// The query-phrase pool now lives on the role scope (role-scope.ts) so it
+// matches the candidate's actual function. It used to be a hardcoded list of
+// operations titles, which meant a candidate in any other field paid for
+// queries searching someone else's job: a product candidate measured 0 of 8
+// queries mentioning "product" on one rotation step.
 
 const ROLE_QUERIES_PER_RUN = 8;
 
@@ -185,6 +152,11 @@ export function buildDiscoveryQueries(params: {
   broaden?: boolean;
   /** Pins the rotation step; defaults to a 15-minute time bucket. */
   rotationSeed?: number;
+  /**
+   * Supplies the title phrases to query for. Defaults to the operations scope,
+   * which is what this module used to hardcode.
+   */
+  roleScope?: RoleScope;
 }): DiscoveryQuery[] {
   const criteria = params.profile.searchCriteria;
   const roleFamilies = criteria?.roleFamilies?.length
@@ -199,7 +171,11 @@ export function buildDiscoveryQueries(params: {
       ? industries.join(", ")
       : "AI infrastructure, cloud infrastructure, developer tools";
 
-  const pool = [...new Set([...roleFamilies, ...ROLE_SYNONYM_POOL])];
+  // The candidate's own stated families come first, then the scope's phrases.
+  // Both are the same role family now, so this widens coverage within it rather
+  // than mixing two different professions together.
+  const scope = params.roleScope ?? OPS_ROLE_SCOPE;
+  const pool = [...new Set([...roleFamilies, ...scope.titlePhrases])];
   // Each run consumes two consecutive slices: the fresh pass takes one and the
   // widen pass the next, so the two are disjoint within a run AND the next run
   // starts past both instead of re-drawing what this run just used.
@@ -290,6 +266,8 @@ export async function discoverCandidatePostings(params: {
   profile: CandidateProfile;
   lastRunDate?: Date | null;
   broaden?: boolean;
+  /** Supplies the title phrases to query for; see buildDiscoveryQueries. */
+  roleScope?: RoleScope;
 }): Promise<DiscoveryResult> {
   if (!process.env.PERPLEXITY_API_KEY) {
     return {

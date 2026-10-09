@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CandidateProfile } from "@/lib/db/schema";
 import { ATS_DOMAIN_FILTER, buildDiscoveryQueries } from "./perplexity-discover";
+import { PRODUCT_ROLE_SCOPE } from "./role-scope";
 
 const baseProfile = {
   id: "profile-1",
@@ -209,5 +210,42 @@ describe("buildDiscoveryQueries", () => {
     expect(phrases.size).toBe(16);
     const later = buildDiscoveryQueries({ profile: baseProfile, rotationSeed: 1 }).slice(0, 8).map((q) => q.query);
     expect(later.some((q) => phrases.has(q))).toBe(false);
+  });
+});
+
+describe("query phrases come from the role scope, not a hardcoded pool", () => {
+  const pmProfile = {
+    searchCriteria: {
+      roleFamilies: ["Product Manager", "Senior Product Manager"],
+      locations: ["Remote"],
+      industries: ["AI"],
+    },
+  } as unknown as CandidateProfile;
+
+  it(
+    "regression: a non-operations candidate used to pay for queries searching someone else's job. " +
+      "The pool was a hardcoded list of ops titles, so a product candidate measured 0 of 8 queries " +
+      "mentioning \"product\" on one rotation step — a whole paid run wasted",
+    () => {
+      // Every rotation step must now stay inside the candidate's function.
+      for (const rotationSeed of [0, 1, 2, 3, 4, 5]) {
+        const roleQueries = buildDiscoveryQueries({
+          profile: pmProfile,
+          roleScope: PRODUCT_ROLE_SCOPE,
+          rotationSeed,
+        }).slice(0, 8);
+        const onTarget = roleQueries.filter((q) => /product/i.test(q.query));
+        expect(
+          onTarget.length,
+          `rotation ${rotationSeed} drew ${onTarget.length}/8 on-target queries: ${roleQueries.map((q) => q.query.split(" job posting")[0]).join(" | ")}`
+        ).toBe(roleQueries.length);
+      }
+    }
+  );
+
+  it("defaults to the operations pool when no scope is passed, so existing behaviour is unchanged", () => {
+    const q = buildDiscoveryQueries({ profile: pmProfile, rotationSeed: 1 }).slice(0, 8);
+    // Rotation 1 under the default pool is where the ops titles show up.
+    expect(q.some((x) => /operations/i.test(x.query))).toBe(true);
   });
 });

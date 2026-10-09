@@ -12,6 +12,7 @@ const SWE_SCOPE: RoleScope = {
   adjacentDomains: ["full stack", "data", "devops", "reliability", "security"],
   disqualifyingDomains: ["sales", "recruiting", "marketing", "hardware", "mechanical", "civil"],
   conditionalDomains: ["support", "manufacturing"],
+  titlePhrases: ["Senior Software Engineer", "Backend Engineer", "Staff Engineer", "Platform Engineer", "Infrastructure Engineer"],
   excludedDomains: [],
   rescuePhrases: [],
   // "staff" and "principal" deliberately absent — senior IC titles in engineering.

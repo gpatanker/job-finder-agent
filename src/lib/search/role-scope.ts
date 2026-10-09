@@ -96,6 +96,21 @@ export type RoleScope = {
   underLeveledTerms: string[];
 
   /**
+   * Title phrases the PAID search channel queries for, one per rotating query.
+   *
+   * Separate from headTerms/coreDomains, which filter titles that come back:
+   * these are what gets ASKED. A scope without its own phrases falls back to a
+   * pool that isn't its role family, and the dilution is severe — a product
+   * candidate measured 0 of 8 queries mentioning "product" on one rotation
+   * step, i.e. a whole paid run spent searching for operations roles.
+   *
+   * Full titles as employers post them ("Senior Product Manager"), not bare
+   * nouns: query length determines which slice of the index comes back, so
+   * specific phrases reach different results than generic ones.
+   */
+  titlePhrases: string[];
+
+  /**
    * Candidate-specific scoring rules, injected verbatim into the Job Search
    * Agent's rubric prompt. The rubric's generic scaffolding (spread the
    * scores, don't score on industry, reserve 85+) stays in code; what counts
@@ -251,6 +266,7 @@ export const OPS_ROLE_SCOPE: RoleScope = {
     "demand generation",
   ],
   rescuePhrases: ["business operations", "business revenue", "bizops", "biz ops"],
+  titlePhrases: ["Business Operations Manager", "Business Operations Lead", "Business Operations Analyst", "Business Operations Associate", "Senior Business Operations Manager", "Strategy and Operations Manager", "Senior Strategy and Operations Manager", "Strategy and Operations Lead", "Strategy and Operations Associate", "Operations Strategy Manager", "Operations Manager", "Senior Operations Manager", "Operations Analyst", "Business Strategy Manager", "Infrastructure Operations Manager", "Cloud Operations Manager", "Data Center Operations Manager", "Capacity Operations Manager", "Capacity Planning Manager", "Site Operations Manager", "Field Operations Manager", "Deployment Operations Manager", "Technical Operations Manager", "Technical Program Manager Operations", "Commercial Operations Manager", "Vendor Operations Manager", "Procurement Operations Manager", "Product Operations Manager", "Program Operations Manager", "Partner Operations Manager", "Sales Operations Manager", "Sales Strategy and Operations Manager"],
   overSeniorTerms: ["director", "head of", "vice president", "vp", "svp", "evp", "principal"],
   underLeveledTerms: [
     "technician", "technologist", "operator", "apprentice", "intern", "installer",
@@ -284,9 +300,10 @@ export const PRODUCT_ROLE_SCOPE: RoleScope = {
   conditionalDomains: ["support", "supply chain", "logistics", "manufacturing"],
   excludedDomains: [],
   rescuePhrases: [],
+  titlePhrases: ["Product Manager", "Senior Product Manager", "Staff Product Manager", "Principal Product Manager", "Group Product Manager", "Technical Product Manager", "Platform Product Manager", "API Product Manager", "Infrastructure Product Manager", "Developer Tools Product Manager", "AI Product Manager", "Machine Learning Product Manager", "Data Product Manager", "Growth Product Manager", "Payments Product Manager", "Enterprise Product Manager", "B2B Product Manager", "Consumer Product Manager", "Marketplace Product Manager", "Core Product Manager", "Product Lead", "Senior Product Lead", "Founding Product Manager", "Product Manager Platform", "Product Manager Infrastructure", "Technical Program Manager Product", "Product Operations Manager", "Associate Product Manager"],
   overSeniorTerms: ["director", "head of", "vice president", "vp", "svp", "evp", "chief"],
   underLeveledTerms: ["intern", "apprentice", "technician", "operator", "installer"],
-  rubricRules: "",
+  rubricRules: "- Higher for: Product Manager titles and close variants (Senior/Staff/Principal/Group Product Manager, Technical PM, Platform PM, AI/ML PM, Growth PM) where the posting evidences owning a product surface end to end \u2014 discovery, prioritisation, roadmap, metrics, and working directly with engineering and design.\n- Lower for: roles that borrow the word \"product\" without being product management \u2014 Product Marketing Manager, Product Designer, Product Support, Product Analyst (unless explicitly a PM role).\n- PRODUCT MARKETING is a hard exclusion \u2014 score below 40 \u2014 even when the title also says Product. It is a different profession with a different craft (positioning, messaging, launch comms) rather than a flavour of PM.\n- PEOPLE-MANAGEMENT-ONLY product roles should score lower unless the candidate said they want management: a Director/Head of Product role is an org job, not an IC product job.\n- ADJACENT-BUT-DIFFERENT functions must score low (below 40) however senior they look: Program/Project Management with no product ownership, Business/Strategy Operations, Solutions Engineering, Customer Success, Data Science, Engineering Management.\n- Do NOT treat STAFF or PRINCIPAL as too senior. In product these are senior individual-contributor levels and are squarely in scope; only Director and above is out of reach.\n\nSENIORITY CEILING \u2014 the reach tops out at Group Product Manager / Principal PM. Do NOT include Director of Product, Head of Product, VP Product, CPO, or any more senior title. Associate PM and PM Intern are below the floor unless the candidate said otherwise. Senior PM, Staff PM, Principal PM, Group PM and Product Lead are all fair game.",
 };
 
 /** Built-in scopes a profile can select by name instead of spelling one out. */

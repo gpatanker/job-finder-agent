@@ -7,11 +7,11 @@ This documents what's been verified, how, and the exact commands to reproduce it
 ```bash
 npx tsc --noEmit                    # typecheck — clean
 npm run build                       # production build — clean, all routes listed
-npm run test                        # Vitest: 333 tests, 33 files — all passing
+npm run test                        # Vitest: 336 tests, 33 files — all passing
 npm run test:e2e                    # Playwright E2E full-flow test (needs credentials)
 ```
 
-## Unit tests (Vitest, 333 tests / 33 files, no live services required)
+## Unit tests (Vitest, 336 tests / 33 files, no live services required)
 
 | Area | File | What it covers |
 |---|---|---|
@@ -29,7 +29,7 @@ npm run test:e2e                    # Playwright E2E full-flow test (needs crede
 | **Rewrite guard** | `src/lib/resume/rewrite-guard.test.ts` | The safety boundary for LLM-reworded bullets: numbers must survive character-for-character (`$3M` → `$3 million` is rejected), no new digit run may appear, proper nouns/acronyms may neither be dropped nor invented, the leading action verb is exempt but a leading acronym is not, length must stay in a 0.55–1.6× band, and a bullet's own pre-approved synonyms count as supporting vocabulary |
 | **One-page fitter** | `src/lib/resume/fit-one-page.test.ts` | `countPdfPages()` against real rendered output, and the give-back priority order — length-adding items first, synonym swaps before keyword-bearing rewrites, older roles before the current one — plus the "base resume itself is too long" report when nothing is left to give back |
 | **Live-board identity** | `src/lib/search/live-board.test.ts` | `matchLiveJob` prefers an exact normalized-title match, takes the best-scoring loose match rather than the first, and returns `null` on a tie; `sameBoardUrl` ignores tracking params so one posting isn't seen as two |
-| Query rotation | `src/lib/search/perplexity-discover.test.ts` | Whole-slice rotation (consecutive steps share no phrases), fresh and widen passes drawing disjoint slices within a run, and `rotationSeed` pinning the step for determinism |
+| Query rotation & targeting | `src/lib/search/perplexity-discover.test.ts` | That every rotation step draws queries inside the candidate's own function — regression for a hardcoded ops phrase pool that had a product candidate paying for 8-of-8 operations queries on one step — plus whole-slice rotation (consecutive steps share no phrases), fresh and widen passes drawing disjoint slices within a run, and `rotationSeed` pinning the step for determinism |
 | Role-family scope | `src/lib/search/known-company-boards.test.ts` | The GTM/revenue-motion exclusion and its Business-Operations rescue clause, asserted against the real title corpus — including that "Sales Operations" stays in scope while "Revenue Operations" does not |
 | Exa channel | `src/lib/search/exa-discover.test.ts` | Query parity with the Perplexity builder (the A/B's core assumption), the ATS domain filter sent as `includeDomains`, `excludeDomains` sent only for the opted-in tuned arm, date-format conversion (MM/DD/YYYY → ISO 8601), actual `costDollars` preferred over the modelled rate card, citation dedupe across queries, and partial results plus a warning when some queries fail or the key is unset |
 | **Role scope** | `src/lib/search/role-scope.test.ts` | That the title filter is retargetable by data: the ops corpus classifies unchanged, `classifyRoleFamily("Product Manager")` flips from null to core purely by swapping scope, the `bareHeadIsCore` distinction (bare head noun is noise for ops and the target for product), the opt-in excluded-family carve-out, the seniority split on "principal" (executive in ops, senior IC in product), regex-metacharacter escaping in scope terms, `_`-prefixed comment-key stripping, and null overrides falling back to the preset rather than blanking a list |

@@ -117,6 +117,12 @@ const TOOL = {
         description:
           'Levels BELOW the candidate, matched as whole words — trade or pre-professional titles. Usually includes intern and apprentice. Include "associate"/"junior" ONLY if the candidate\'s stated floor excludes them.',
       },
+      titlePhrases: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "20-30 FULL job titles as employers actually post them, which the paid search channel will query one at a time. Include the level variants the candidate is targeting and the common domain variants of their function (e.g. for product: \"Senior Product Manager\", \"Technical Product Manager\", \"Platform Product Manager\", \"AI Product Manager\"). Not bare nouns like \"product\" — query length determines which slice of the search index comes back, so specific full titles reach different results than generic words. Stay inside the candidate's stated level band.",
+      },
       rubricRules: {
         type: "string",
         description:
@@ -126,6 +132,7 @@ const TOOL = {
     required: [
       "label",
       "headTerms",
+      "titlePhrases",
       "bareHeadIsCore",
       "coreDomains",
       "adjacentDomains",
@@ -196,6 +203,13 @@ export function validateDerivedScope(
 
   if (scope.rescuePhrases.length > 0 && scope.excludedDomains.length === 0) {
     return { ok: false, error: "rescuePhrases set with no excludedDomains to rescue from." };
+  }
+
+  if (scope.titlePhrases.length < 4) {
+    return {
+      ok: false,
+      error: `titlePhrases has only ${scope.titlePhrases.length} entries — the paid search channel draws 8 rotating queries per run, so a thin pool means repeated queries and wasted spend.`,
+    };
   }
 
   if (!scope.rubricRules.trim()) {
@@ -295,6 +309,10 @@ export async function deriveRoleScope(input: ScopeDerivationInput): Promise<Scop
     bareHeadIsCore: raw.bareHeadIsCore === true,
     coreDomains: strings(raw.coreDomains),
     adjacentDomains: strings(raw.adjacentDomains),
+    // Titles keep their original casing — they go into search queries, not matchers.
+    titlePhrases: Array.isArray(raw.titlePhrases)
+      ? [...new Set(raw.titlePhrases.filter((x): x is string => typeof x === "string" && x.trim() !== "").map((x) => x.trim()))]
+      : [],
     disqualifyingDomains: strings(raw.disqualifyingDomains),
     conditionalDomains: strings(raw.conditionalDomains),
     excludedDomains: strings(raw.excludedDomains),
