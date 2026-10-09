@@ -33,6 +33,7 @@ const baseProfile = {
     industries: ["AI infrastructure", "Cloud infrastructure"],
     salaryFloor: 140000,
   },
+  applyDefaults: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 } satisfies CandidateProfile;
@@ -220,6 +221,7 @@ describe("query phrases come from the role scope, not a hardcoded pool", () => {
       locations: ["Remote"],
       industries: ["AI"],
     },
+    applyDefaults: null,
   } as unknown as CandidateProfile;
 
   it(

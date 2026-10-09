@@ -51,5 +51,26 @@
       "_generated_by": "npm run db:derive-role-scope -- --write",
       "_note": "Do not hand-write this from scratch. Generate it from targetStatement, read what it produced, then edit if needed. Search refuses to run until this is set — there is no safe default, because the built-in fallback is another candidate's operations scope in which \"engineer\" is a disqualifying term. Shortcut: replace this whole object with the string \"ops\" or \"product\" to use a built-in preset as-is."
     }
+  },
+  "applyDefaults": {
+    "_note": "Standing answers to the questions that recur on every application. `npm run db:generate-apply-defaults` renders these into .claude/skills/apply-run/standing-answers.md (gitignored), which the apply-run skill reads. A blank field renders as \"NOT SET — ask the candidate\", so the apply run pauses rather than inheriting someone else's answer. Leave anything you're unsure about blank: a wrong value here is submitted to a real employer under your name.",
+    "_githubUrl": "e.g. https://github.com/yourhandle — only asked by some engineering-adjacent forms",
+    "githubUrl": "",
+    "_visaStatus": "e.g. \"U.S. Citizen\" — answers free-text \"current visa status\" fields",
+    "visaStatus": "",
+    "_securityClearanceEligible": "true/false — eligible to obtain/maintain a clearance. Leave null if you don't know.",
+    "securityClearanceEligible": null,
+    "_ageBracket": "e.g. \"Under 30\" — optional diversity-survey age buckets only",
+    "ageBracket": "",
+    "_officePreference": "e.g. \"San Francisco over New York\" — used when a form offers a choice of office",
+    "officePreference": "",
+    "_salaryAnswerStyle": "e.g. \"Free-text field: the posted range works. Numeric field: the median of the posted range.\"",
+    "salaryAnswerStyle": "",
+    "_essayStyle": "e.g. \"~2 short paragraphs, at most one stacked number. Don't over-write.\"",
+    "essayStyle": "",
+    "_gpa": "Only needed because some forms make it required. Leave blank otherwise.",
+    "gpa": "",
+    "_extraNotes": "Anything else that recurs on forms and has a settled answer, e.g. \"Has used HubSpot before, if asked.\"",
+    "extraNotes": []
   }
 }

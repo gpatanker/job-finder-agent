@@ -7,11 +7,11 @@ This documents what's been verified, how, and the exact commands to reproduce it
 ```bash
 npx tsc --noEmit                    # typecheck — clean
 npm run build                       # production build — clean, all routes listed
-npm run test                        # Vitest: 336 tests, 33 files — all passing
+npm run test                        # Vitest: 337 tests, 33 files — all passing
 npm run test:e2e                    # Playwright E2E full-flow test (needs credentials)
 ```
 
-## Unit tests (Vitest, 336 tests / 33 files, no live services required)
+## Unit tests (Vitest, 337 tests / 33 files, no live services required)
 
 | Area | File | What it covers |
 |---|---|---|
@@ -19,7 +19,7 @@ npm run test:e2e                    # Playwright E2E full-flow test (needs crede
 | Deterministic fallback | `src/lib/resume/deterministic-tailoring.test.ts` | Keyword-overlap ranking of bullets/skills, empty-JD edge case, never sets `phraseChoices` |
 | Keyword extraction | `src/lib/text/keywords.test.ts` | Stopword removal, frequency ranking, limit — caught and fixed a real bug (trailing punctuation like `"negotiation."` wasn't stripped) |
 | Resume coverage scoring | `src/lib/resume/keyword-coverage.test.ts` | `scoreCoverage`/`missingKeywords` against a fixture resume |
-| PDF generation | `src/lib/resume/render-pdf.test.ts` | Renders a **generic fixture resume** (not personal data), verifies exactly 1 page, correct `Author`/`Title`/`Producer` metadata, real extractable ATS-friendly text, and a **golden-master snapshot** of the extracted text to catch future layout regressions |
+| PDF generation | `src/lib/resume/render-pdf.test.ts` | Renders a **generic fixture resume** (not personal data), verifies exactly 1 page, correct `Author`/`Title`/`Producer` metadata (including a regression test that `Author` comes from the resume being rendered rather than a hardcoded name, since a fork would otherwise ship PDFs carrying the original author's name in a field nobody checks), real extractable ATS-friendly text, and a **golden-master snapshot** of the extracted text to catch future layout regressions |
 | Prompt scraping | `src/lib/scraping/greenhouse.test.ts`, `generic.test.ts` | Parses saved HTML fixtures (trimmed excerpts of real Greenhouse markup) — essay question extracted, standard/PII fields excluded, "GitHub URL"-style short fields correctly excluded |
 | Answer-generation retrieval | `src/lib/answers/select-stories.test.ts` | Keyword-based story ranking picks the right story first |
 | Apply Agent checklist | `src/lib/apply/readiness.test.ts` | All 5 checklist conditions, complete/incomplete states |

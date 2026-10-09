@@ -92,6 +92,13 @@
       "when": 1789615179103,
       "tag": "0012_shiny_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791577369400,
+      "tag": "0013_illegal_darkhawk",
+      "breakpoints": true
     }
   ]
 }

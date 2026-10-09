@@ -56,7 +56,7 @@ async function main() {
        gender_identity, race_ethnicity, sexual_orientation, veteran_status,
        disability_status, zip_code, highest_education_level, total_years_experience,
        requires_relocation_assistance, how_heard_default, ai_policy_agreement,
-       education, search_criteria)
+       education, search_criteria, apply_defaults)
     values (
       ${profile.name}, ${profile.email}, ${profile.phone ?? null},
       ${profile.linkedin ?? null}, ${profile.location ?? null},
@@ -71,7 +71,8 @@ async function main() {
       ${profile.requiresRelocationAssistance ?? false},
       ${profile.howHeardDefault || null}, ${profile.aiPolicyAgreement || null},
       ${sql.json(profile.education ?? [])},
-      ${sql.json(profile.searchCriteria ?? null)}
+      ${sql.json(profile.searchCriteria ?? null)},
+      ${sql.json(profile.applyDefaults ?? null)}
     )
   `;
   console.log("candidate_profile seeded");

@@ -108,9 +108,9 @@ export function isOverSeniorTitle(
  * "operations" plus the "data center" ADJACENT_DOMAINS entry — an entry
  * that has to stay, since "Infrastructure Operations" and "AI Infrastructure
  * Operations" are the candidate's own stated role families. The domain is
- * right; the level and the hands-on nature of the work are not. Gaurav's
- * words: "data center Ops technician are not roles that align with what I
- * do."
+ * right; the level and the hands-on nature of the work are not. The
+ * candidate's own words: "data center Ops technician are not roles that
+ * align with what I do."
  *
  * Deliberately narrow. Only titles naming a manual/technical trade or an
  * explicitly pre-professional level are listed, so a management title in the

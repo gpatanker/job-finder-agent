@@ -33,6 +33,7 @@ const baseProfile = {
     industries: ["AI infrastructure", "Cloud infrastructure"],
     salaryFloor: 140000,
   },
+  applyDefaults: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 } satisfies CandidateProfile;
